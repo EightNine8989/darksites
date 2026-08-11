@@ -8,6 +8,8 @@ import { fetchHourlyWeather, computeHourlyScore, findBestWindow } from '../lib/w
 import { DARK_SKY_PLACES } from '../lib/dark-sky-places';
 import { t, tCat } from '../lib/i18n';
 import { computeTonightSummary, type TonightSummary } from '../lib/recommendation';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
 // ===== 8 方位定义 =====
 const DIRECTIONS = [
@@ -29,6 +31,8 @@ let overallScore = 0;
 let moonPhaseName = '';
 let bestWindow = '';
 let tonightSummary: TonightSummary | null = null;
+let mapInstance: L.Map | null = null;
+let mapMarkers: L.Layer[] = [];
 
 // ===== Render =====
 export function renderSitesPage(): string {
@@ -70,6 +74,9 @@ export function renderSitesPage(): string {
         <button class="chip ${ctx.activeTarget === 'planets' ? 'active' : ''}" data-target="planets">${t('filter.planets')}</button>
       </div>
     </div>
+
+    <!-- Map -->
+    <div id="sitesMap" class="sites-map"></div>
 
     <!-- Tonight Recommendation -->
     <div id="tonightRec"></div>
@@ -124,6 +131,9 @@ export function initSitesPage(): void {
     updateDateBar();
     recalculate();
   });
+
+  // Initialize Leaflet map
+  initSitesMap();
 
   // Initial calculation
   recalculate();
@@ -208,6 +218,7 @@ async function recalculate() {
     renderCompass();
     renderNearbySites();
     renderTonightRecommendation();
+    updateMapPins();
   } catch (err) {
     console.error('recalculate error:', err);
     container.innerHTML = '<div class="loading"><span>' + t('general.calcFailed') + '</span></div>';
@@ -500,4 +511,99 @@ function renderTonightRecommendation() {
       if (id) (window as any).navigateTo?.('object-detail', id);
     });
   });
+}
+
+// ===== Leaflet Map =====
+function initSitesMap() {
+  const container = document.getElementById('sitesMap');
+  if (!container) return;
+
+  // Destroy previous instance if any
+  if (mapInstance) {
+    mapInstance.remove();
+    mapInstance = null;
+  }
+
+  mapInstance = L.map(container, {
+    center: [ctx.location.lat, ctx.location.lon],
+    zoom: 8,
+    zoomControl: false,
+    attributionControl: false,
+  });
+
+  // Dark-themed tiles (CartoDB dark matter, free & no key needed)
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 18,
+    subdomains: 'abcd',
+  }).addTo(mapInstance);
+
+  // User location pin
+  const youIcon = L.divIcon({
+    className: '',
+    html: '<div class="map-pin-dot you"></div>',
+    iconSize: [14, 14],
+    iconAnchor: [7, 7],
+  });
+  L.marker([ctx.location.lat, ctx.location.lon], { icon: youIcon }).addTo(mapInstance);
+
+  // Nearby dark site pins
+  updateMapPins();
+
+  // Invalidate size after DOM paint
+  requestAnimationFrame(() => {
+    mapInstance?.invalidateSize();
+  });
+}
+
+function updateMapPins() {
+  if (!mapInstance) return;
+
+  // Remove old markers
+  mapMarkers.forEach(m => m.remove());
+  mapMarkers = [];
+
+  const loc = ctx.location;
+  const sites = DARK_SKY_PLACES
+    .map(p => ({
+      ...p,
+      distKm: Math.round(Math.sqrt((p.lat - loc.lat) ** 2 + (p.lon - loc.lon) ** 2) * 111),
+    }))
+    .sort((a, b) => a.distKm - b.distKm)
+    .slice(0, 5);
+
+  sites.forEach((s, i) => {
+    const scoreVal = Math.max(10, 100 - s.bortle * 10);
+    const color = scoreVal >= 70 ? '#7fdda9' : scoreVal >= 40 ? '#8bb5ff' : '#f0c96e';
+
+    const pinIcon = L.divIcon({
+      className: '',
+      html: `<div style="width:22px;height:22px;border-radius:50%;background:${color};color:#050811;display:grid;place-items:center;font-size:11px;font-weight:900;border:2px solid rgba(255,255,255,.7);box-shadow:0 2px 6px rgba(0,0,0,.5)">${i + 1}</div>`,
+      iconSize: [22, 22],
+      iconAnchor: [11, 11],
+    });
+
+    const marker = L.marker([s.lat, s.lon], { icon: pinIcon }).addTo(mapInstance!);
+    marker.bindTooltip(s.name, {
+      permanent: true,
+      direction: 'top',
+      offset: [0, -14],
+      className: 'map-site-label',
+    });
+
+    marker.on('click', () => {
+      (window as any).navigateTo?.('place-detail', s.name);
+    });
+
+    mapMarkers.push(marker);
+  });
+
+  // Fit bounds to show all pins + user
+  if (sites.length > 0) {
+    const allPoints = [
+      [loc.lat, loc.lon] as [number, number],
+      ...sites.map(s => [s.lat, s.lon] as [number, number]),
+    ];
+    const bounds = L.latLngBounds(allPoints);
+    mapInstance.fitBounds(bounds, { padding: [30, 30], maxZoom: 10 });
+  }
 }
