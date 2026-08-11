@@ -311,11 +311,11 @@ function renderDirectionDetail() {
     ${sky.objects.length > 0 ? objCards : '<div class="card"><div class="meta" style="text-align:center;padding:20px 0">No bright objects in this direction tonight</div></div>'}
   `;
 
-  // Object card click
+  // Object card click → navigate to object detail
   container.querySelectorAll('[data-object]').forEach(el => {
     el.addEventListener('click', () => {
       const id = (el as HTMLElement).dataset.object;
-      (window as any).toast?.(`Opening ${id} detail...`);
+      if (id) (window as any).navigateTo?.('object-detail', id);
     });
   });
 }
@@ -345,7 +345,7 @@ function renderNearbySites() {
     const statusClass = s.yearCert ? 'official' : 'good';
     const statusLabel = s.yearCert ? 'Official' : 'Suggested';
     return `
-      <div class="card clickable" data-site-lat="${s.lat}" data-site-lon="${s.lon}">
+      <div class="card clickable" data-site-name="${s.name}">
         <div class="row">
           <div>
             <div class="place">${s.name}</div>
@@ -359,6 +359,14 @@ function renderNearbySites() {
         </div>
       </div>`;
   }).join('');
+
+  // Click handler for site cards → navigate to place detail
+  container.querySelectorAll('[data-site-name]').forEach(el => {
+    el.addEventListener('click', () => {
+      const name = (el as HTMLElement).dataset.siteName!;
+      (window as any).navigateTo?.('place-detail', name);
+    });
+  });
 }
 
 function scoreClass(bortle: number): string {

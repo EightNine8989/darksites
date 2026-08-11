@@ -253,21 +253,11 @@ function renderObjectList() {
 
   container.innerHTML = objectsWithPos.map(({ obj, pos }) => renderObjectCard(obj, pos)).join('');
 
-  // Bind click handlers
+  // Bind click handlers → navigate to object detail page
   container.querySelectorAll('.object-card').forEach(el => {
     el.addEventListener('click', () => {
       const id = (el as HTMLElement).dataset.id!;
-      expandObjectDetail(id);
-    });
-  });
-
-  // Bind expand collapse
-  container.querySelectorAll('.object-detail-close').forEach(el => {
-    el.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const id = (el as HTMLElement).dataset.id!;
-      const detail = document.getElementById(`detail-${id}`);
-      if (detail) detail.remove();
+      (window as any).navigateTo?.('object-detail', id);
     });
   });
 }

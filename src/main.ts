@@ -4,6 +4,39 @@ import { ctx, restoreContext, persistContext, updateContext, onContextChange } f
 import { getCurrentLocation, getGPSLocation } from './lib/location';
 import { renderSitesPage, initSitesPage } from './pages/sites';
 import { renderObjectsPage, initObjectsPage } from './pages/objects';
+import { renderObjectDetailPage, initObjectDetailPage } from './pages/object-detail';
+import { renderPlaceDetailPage, initPlaceDetailPage } from './pages/place-detail';
+
+// ===== Navigation Stack =====
+type PageRoute = { type: 'tab'; tab: TabId } | { type: 'object-detail'; id: string } | { type: 'place-detail'; id: string };
+let navStack: PageRoute[] = [{ type: 'tab', tab: 'sites' }];
+
+function pushRoute(route: PageRoute) {
+  navStack.push(route);
+  renderRoute(route);
+  updateTabBarVisibility();
+}
+
+function popRoute() {
+  if (navStack.length <= 1) return;
+  navStack.pop();
+  const route = navStack[navStack.length - 1];
+  renderRoute(route);
+  updateTabBarVisibility();
+}
+
+function navigateTo(type: string, id: string) {
+  if (type === 'object-detail') pushRoute({ type: 'object-detail', id });
+  else if (type === 'place-detail') pushRoute({ type: 'place-detail', id });
+}
+
+function navigateBack() {
+  popRoute();
+}
+
+// Expose globally for detail pages
+(window as any).navigateTo = navigateTo;
+(window as any).navigateBack = navigateBack;
 
 // ===== Tab Routing =====
 type TabId = 'sites' | 'objects' | 'profile';
@@ -12,30 +45,61 @@ let tabInited: Record<TabId, boolean> = { sites: false, objects: false, profile:
 
 function switchTab(tab: TabId) {
   currentTab = tab;
+  navStack = [{ type: 'tab', tab }]; // reset stack on tab switch
   renderCurrentPage();
   // Update tab bar
   document.querySelectorAll('.tab').forEach(t => {
     t.classList.toggle('active', (t as HTMLElement).dataset.tab === tab);
   });
+  updateTabBarVisibility();
+}
+
+function updateTabBarVisibility() {
+  const tabBar = document.getElementById('tabBar');
+  if (!tabBar) return;
+  const route = navStack[navStack.length - 1];
+  // Show tab bar only on tab pages
+  const isTabPage = route.type === 'tab';
+  tabBar.style.display = isTabPage ? 'flex' : 'none';
 }
 
 function renderCurrentPage() {
+  const route = navStack[navStack.length - 1];
+  renderRoute(route);
+}
+
+function renderRoute(route: PageRoute) {
   const container = document.getElementById('pageContainer');
   if (!container) return;
+  container.scrollTop = 0; // scroll to top on navigation
 
-  switch (currentTab) {
-    case 'sites':
-      container.innerHTML = renderSitesPage();
-      if (!tabInited.sites) { initSitesPage(); tabInited.sites = true; }
-      else { initSitesPage(); } // re-init event handlers on re-render
+  switch (route.type) {
+    case 'tab':
+      switch (route.tab) {
+        case 'sites':
+          container.innerHTML = renderSitesPage();
+          initSitesPage();
+          tabInited.sites = true;
+          break;
+        case 'objects':
+          container.innerHTML = renderObjectsPage();
+          initObjectsPage();
+          tabInited.objects = true;
+          break;
+        case 'profile':
+          container.innerHTML = renderProfilePlaceholder();
+          break;
+      }
       break;
-    case 'objects':
-      container.innerHTML = renderObjectsPage();
-      if (!tabInited.objects) { initObjectsPage(); tabInited.objects = true; }
-      else { initObjectsPage(); }
+
+    case 'object-detail':
+      container.innerHTML = renderObjectDetailPage(route.id);
+      initObjectDetailPage();
       break;
-    case 'profile':
-      container.innerHTML = renderProfilePlaceholder();
+
+    case 'place-detail':
+      container.innerHTML = renderPlaceDetailPage(route.id);
+      initPlaceDetailPage();
       break;
   }
 }

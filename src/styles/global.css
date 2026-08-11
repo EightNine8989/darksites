@@ -159,6 +159,22 @@ button { cursor: pointer; border: none; background: none; }
 .loading .spinner { width: 28px; height: 28px; border: 3px solid var(--line); border-top-color: var(--blue); border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ===== Season Chart (object detail) ===== */
+.season { display: grid; grid-template-columns: repeat(12, 1fr); gap: 3px; margin-top: 10px; }
+.month { height: 30px; border-radius: 6px; }
+.month.low { background: #131a28; }
+.month.mid { background: #263d63; }
+.month.high { background: #527fc9; }
+.month.best { background: #83b5ff; }
+
+/* ===== Timeline (place detail) ===== */
+.timeline { margin-top: 10px; border: 1px solid var(--line); border-radius: 17px; background: #0a111e; padding: 12px; }
+.bar { height: 9px; background: linear-gradient(90deg, #26354d 0 14%, #73a5ff 14% 74%, #26354d 74%); border-radius: 20px; margin: 10px 0; }
+
+/* ===== List Line (equipment list in detail) ===== */
+.list-line { padding: 11px 0; border-bottom: 1px solid rgba(92,110,140,.22); }
+.list-line:last-child { border-bottom: 0; }
+
 /* ===== Desktop frame ===== */
 @media (min-width: 431px) {
   body { padding: 16px; background: #02040a; }
