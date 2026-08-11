@@ -6,25 +6,26 @@ import { celestialCatalog } from '../lib/catalog';
 import { computePosition, computeMoonPhase, computeSunInfo } from '../lib/astronomy';
 import { fetchHourlyWeather, computeHourlyScore, findBestWindow } from '../lib/weather';
 import { DARK_SKY_PLACES } from '../lib/dark-sky-places';
+import { t, tCat } from '../lib/i18n';
 
 // ===== Filter chips =====
 type ObjectFilter = 'all' | 'star' | 'planet' | 'deepSky' | 'moon' | 'milkyway' | 'meteor';
-const FILTERS: { key: ObjectFilter; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'star', label: 'Stars' },
-  { key: 'planet', label: 'Planets' },
-  { key: 'deepSky', label: 'Deep Sky' },
-  { key: 'moon', label: 'Moon' },
-  { key: 'milkyway', label: 'Milky Way' },
-  { key: 'meteor', label: 'Meteor' },
+const FILTERS: { key: ObjectFilter; labelKey: string }[] = [
+  { key: 'all', labelKey: 'filter.all' },
+  { key: 'star', labelKey: 'filter.stars' },
+  { key: 'planet', labelKey: 'filter.planets' },
+  { key: 'deepSky', labelKey: 'filter.deepSky' },
+  { key: 'moon', labelKey: 'filter.moon' },
+  { key: 'milkyway', labelKey: 'filter.milkyway' },
+  { key: 'meteor', labelKey: 'filter.meteor' },
 ];
 
 // ===== Sort modes =====
 type SortMode = 'altitude' | 'magnitude' | 'name';
-const SORT_OPTIONS: { key: SortMode; label: string }[] = [
-  { key: 'altitude', label: 'Altitude' },
-  { key: 'magnitude', label: 'Brightness' },
-  { key: 'name', label: 'Name' },
+const SORT_OPTIONS: { key: SortMode; labelKey: string }[] = [
+  { key: 'altitude', labelKey: 'objects.sortAlt' },
+  { key: 'magnitude', labelKey: 'objects.sortMag' },
+  { key: 'name', labelKey: 'objects.sortName' },
 ];
 
 // ===== State =====
@@ -63,8 +64,8 @@ export function renderObjectsPage(): string {
   return `
     <div class="page-top">
       <div>
-        <div class="page-sub">What is worth seeing?</div>
-        <h1>Objects</h1>
+        <div class="page-sub">${t('objects.sub')}</div>
+        <h1>${t('objects.title')}</h1>
       </div>
       <button class="icon-btn" id="objectsSortBtn">⇅</button>
     </div>
@@ -72,30 +73,30 @@ export function renderObjectsPage(): string {
     <div class="date-bar">
       <button class="date-btn" id="objectsDateBtn">
         <strong>${formatDateShort()} · ${ctx.startTime}</strong>
-        <span>Observation time</span>
+        <span>${t('general.obsTime')}</span>
       </button>
       <button class="date-btn" id="objectsEquipBtn">
         <strong>${equipmentSummary()}</strong>
-        <span>Your equipment</span>
+        <span>${t('sites.yourEquip')}</span>
       </button>
     </div>
 
     <div class="hero-card">
-      <h2>Plan your observation</h2>
-      <p>Browse all visible objects tonight. Sort by altitude, brightness, or name. Filter by type or your equipment.</p>
+      <h2>${t('objects.heroTitle')}</h2>
+      <p>${t('objects.heroDesc')}</p>
       <div class="search">
-        <input id="objectsSearch" placeholder="Search star, planet, nebula..." value="${searchQuery}">
+        <input id="objectsSearch" placeholder="${t('objects.search')}" value="${searchQuery}">
         <button id="objectsSearchBtn">⌕</button>
       </div>
     </div>
 
     <div class="chips" id="objectsChips">
-      ${FILTERS.map(f => `<button class="chip ${currentFilter === f.key ? 'active' : ''}" data-filter="${f.key}">${f.label}</button>`).join('')}
+      ${FILTERS.map(f => `<button class="chip ${currentFilter === f.key ? 'active' : ''}" data-filter="${f.key}">${t(f.labelKey)}</button>`).join('')}}
     </div>
 
     <!-- Sort mode indicator -->
     <div id="objectsSortIndicator" class="section" style="margin-bottom:0">
-      <h3 style="font-size:14px">Sorted by ${SORT_OPTIONS.find(s => s.key === currentSort)?.label}</h3>
+      <h3 style="font-size:14px">${t('objects.sortedBy')}${t(SORT_OPTIONS.find(s => s.key === currentSort)?.labelKey || '')}</h3>
       <span class="page-sub" id="objectsCount">—</span>
     </div>
 
@@ -121,7 +122,7 @@ export function initObjectsPage(): void {
     currentSort = SORT_OPTIONS[(idx + 1) % SORT_OPTIONS.length].key;
     const indicator = document.getElementById('objectsSortIndicator');
     if (indicator) {
-      indicator.querySelector('h3')!.textContent = `Sorted by ${SORT_OPTIONS.find(s => s.key === currentSort)?.label}`;
+      indicator.querySelector('h3')!.textContent = `${t('objects.sortedBy')}${t(SORT_OPTIONS.find(s => s.key === currentSort)?.labelKey || '')}`;
     }
     renderObjectList();
   });
@@ -239,13 +240,13 @@ function renderObjectList() {
   });
 
   // Update count
-  if (countEl) countEl.textContent = `${objectsWithPos.length} objects`;
+  if (countEl) countEl.textContent = `${objectsWithPos.length} ${t('objects.objects')}`;
 
   if (objectsWithPos.length === 0) {
     container.innerHTML = `
       <div class="card">
         <div class="meta" style="text-align:center;padding:30px 0">
-          No objects match your filter. Try a different category or search.
+          ${t('objects.noMatch')}
         </div>
       </div>`;
     return;
@@ -272,7 +273,7 @@ function renderObjectCard(obj: CelestialObject, pos: CelestialPosition | null): 
   const month = new Date().getMonth();
   const seasonData = SEASON_DATA[obj.id];
   const seasonScore = seasonData ? seasonData[month] : 2;
-  const seasonLabel = ['—', 'Low', 'Mid', 'High', 'Best'][seasonScore];
+  const seasonLabel = ['—', ctx.language === 'zh' ? '低' : 'Low', ctx.language === 'zh' ? '中' : 'Mid', ctx.language === 'zh' ? '高' : 'High', ctx.language === 'zh' ? '最佳' : 'Best'][seasonScore];
 
   // Equipment match
   const equipMatch = getEquipmentMatch(obj);
@@ -297,7 +298,7 @@ function renderObjectCard(obj: CelestialObject, pos: CelestialPosition | null): 
           <div class="place">${obj.name}</div>
           <div class="meta">
             ${obj.constellation !== '—' ? obj.constellation : ''} · Mag ${obj.magnitude > 0 ? '+' : ''}${obj.magnitude.toFixed(1)}
-            ${visible ? ` · <span style="color:var(--good)">${altText} ${dirText}</span>` : ' · <span style="color:var(--dim)">Below horizon</span>'}
+            ${visible ? ` · <span style="color:var(--good)">${altText} ${dirText}</span>` : ` · <span style="color:var(--dim)">${t('objects.belowHorizon')}</span>`}
           </div>
         </div>
         <div style="text-align:right;flex:0 0 auto">
@@ -307,7 +308,7 @@ function renderObjectCard(obj: CelestialObject, pos: CelestialPosition | null): 
       <div class="badges">
         <span class="badge ${typeInfo.cls}">${typeInfo.label}</span>
         ${visible ? `<span class="badge">${bestTime}</span>` : ''}
-        ${seasonScore >= 3 ? `<span class="badge good">${seasonLabel} season</span>` : seasonScore === 1 ? `<span class="badge warn">Low season</span>` : ''}
+        ${seasonScore >= 3 ? `<span class="badge good">${t('objects.bestSeason')}</span>` : seasonScore === 1 ? `<span class="badge warn">${t('objects.lowSeason')}</span>` : ''}
         ${equipMatch ? `<span class="badge official">${equipMatch}</span>` : ''}
         <span class="badge ${diffInfo.cls}">${diffInfo.label}</span>
       </div>
@@ -335,7 +336,7 @@ function expandObjectDetail(id: string) {
 
   // Season chart
   const seasonData = SEASON_DATA[id] || Array(12).fill(2);
-  const monthNames = ['J','F','M','A','M','J','J','A','S','O','N','D'];
+  const monthNames = ctx.language === 'zh' ? ['1','2','3','4','5','6','7','8','9','10','11','12'] : ['J','F','M','A','M','J','J','A','S','O','N','D'];
   const currentMonth = new Date().getMonth();
   const seasonChart = monthNames.map((m, i) => {
     const v = seasonData[i];
@@ -377,7 +378,7 @@ function expandObjectDetail(id: string) {
       </div>
     </div>` : `
     <div class="meta" style="text-align:center;padding:8px 0;color:var(--warn)">
-      Below horizon at selected time. Try a different date or time.
+      ${t('objDetail.belowHorizon')}
     </div>`}
 
     <div class="page-sub" style="margin-bottom:6px">Seasonal visibility</div>
@@ -416,21 +417,21 @@ function expandObjectDetail(id: string) {
 // ===== Helpers =====
 function typeToInfo(type: CelestialCategory): { cls: string; label: string } {
   const map: Record<string, { cls: string; label: string }> = {
-    planet:  { cls: 'warn', label: 'Planet' },
-    star:    { cls: 'good', label: 'Star' },
-    deepSky: { cls: 'official', label: 'Deep Sky' },
-    moon:    { cls: '', label: 'Moon' },
-    milkyway:{ cls: 'good', label: 'Milky Way' },
-    meteor:  { cls: 'warn', label: 'Meteor' },
+    planet:  { cls: 'warn', label: t('type.planet') },
+    star:    { cls: 'good', label: t('type.star') },
+    deepSky: { cls: 'official', label: t('type.deepSky') },
+    moon:    { cls: '', label: t('type.moon') },
+    milkyway:{ cls: 'good', label: t('type.milkyway') },
+    meteor:  { cls: 'warn', label: t('type.meteor') },
   };
   return map[type] || { cls: '', label: type };
 }
 
 function difficultyInfo(diff?: string): { cls: string; label: string } {
   switch (diff) {
-    case 'easy': return { cls: 'good', label: 'Easy' };
-    case 'moderate': return { cls: 'warn', label: 'Moderate' };
-    case 'challenging': return { cls: 'bad', label: 'Hard' };
+    case 'easy': return { cls: 'good', label: t('diff.easy') };
+    case 'moderate': return { cls: 'warn', label: t('diff.moderate') };
+    case 'challenging': return { cls: 'bad', label: t('diff.challenging') };
     default: return { cls: '', label: '—' };
   }
 }
@@ -453,11 +454,11 @@ function getEquipmentMatch(obj: CelestialObject): string {
 
 function equipmentTypeToLabel(type: EquipmentType): string {
   const map: Record<EquipmentType, string> = {
-    naked_eye: '肉眼',
-    binoculars: '双筒镜',
-    telescope: '望远镜',
-    camera: '相机',
-    phone: '手机',
+    naked_eye: ctx.language === 'zh' ? '肉眼' : 'Naked eye',
+    binoculars: ctx.language === 'zh' ? '双筒镜' : 'Binoculars',
+    telescope: ctx.language === 'zh' ? '望远镜' : 'Telescope',
+    camera: ctx.language === 'zh' ? '相机' : 'Camera',
+    phone: ctx.language === 'zh' ? '手机' : 'Phone',
   };
   return map[type] || type;
 }
@@ -465,11 +466,11 @@ function equipmentTypeToLabel(type: EquipmentType): string {
 function getEquipmentRecommendation(obj: CelestialObject): string {
   if (!obj.equipment || obj.equipment.length === 0) return '';
   const tips: Record<string, string> = {
-    '肉眼': 'Visible to naked eye — just look up!',
-    '双筒镜': 'Binoculars recommended — 7×50 or 10×50 ideal',
-    '望远镜': 'Telescope recommended — 80mm+ aperture for best view',
-    '广角相机': 'Wide-angle camera on tripod — long exposure 15-30s',
-    '相机': 'Camera with tripod — try 15-30s exposures at high ISO',
+    '肉眼': ctx.language === 'zh' ? '肉眼可见——抬头即可！' : 'Visible to naked eye — just look up!',
+    '双筒镜': ctx.language === 'zh' ? '推荐双筒镜——7×50 或 10×50 最佳' : 'Binoculars recommended — 7×50 or 10×50 ideal',
+    '望远镜': ctx.language === 'zh' ? '推荐望远镜——80mm+ 口径效果最佳' : 'Telescope recommended — 80mm+ aperture for best view',
+    '广角相机': ctx.language === 'zh' ? '三脚架+广角相机——长曝光 15-30s' : 'Wide-angle camera on tripod — long exposure 15-30s',
+    '相机': ctx.language === 'zh' ? '三脚架+相机——高 ISO 15-30s 曝光' : 'Camera with tripod — try 15-30s exposures at high ISO',
   };
   return obj.equipment.map(e => tips[e] || e).join(' · ');
 }

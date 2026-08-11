@@ -1,7 +1,8 @@
 // ===== Profile 页面 =====
 // "我的设备、观测记录、贡献者权益"
-import type { EquipmentItem, ObservationRecord, Contribution } from '../types';
+import type { EquipmentItem, ObservationRecord } from '../types';
 import { ctx, persistContext, onContextChange } from '../lib/context';
+import { t, tCat } from '../lib/i18n';
 
 // ===== State =====
 let profileTab: 'equipment' | 'records' | 'contributions' = 'equipment';
@@ -80,28 +81,42 @@ export function renderProfilePage(): string {
   const records = loadRecords();
   const acceptedCount = SAMPLE_CONTRIBUTIONS.filter(c => c.status === 'accepted' || c.status === 'verified').length;
   const verifiedCount = SAMPLE_CONTRIBUTIONS.filter(c => c.status === 'verified').length;
-  const contributionLevel = acceptedCount >= 5 ? 'Founding Explorer' : acceptedCount >= 3 ? 'Explorer' : 'Observer';
+  const contributionLevel = acceptedCount >= 5 ? (ctx.language === 'zh' ? '创始探索者' : 'Founding Explorer') : acceptedCount >= 3 ? (ctx.language === 'zh' ? '探索者' : 'Explorer') : (ctx.language === 'zh' ? '观测者' : 'Observer');
   const lifetimeEligible = acceptedCount >= 3;
 
   return `
     <div class="page-top">
       <div>
-        <div class="page-sub">Your observing profile</div>
-        <h1>Profile</h1>
+        <div class="page-sub">${t('profile.sub')}</div>
+        <h1>${t('profile.title')}</h1>
       </div>
       <button class="icon-btn" id="profileSettings">⚙︎</button>
     </div>
 
     <div class="hero-card">
-      <h2>Observer profile</h2>
-      <p>Your equipment and history improve object recommendations and keep your contributions organized.</p>
+      <h2>${t('profile.heroTitle')}</h2>
+      <p>${t('profile.heroDesc')}</p>
+    </div>
+
+    <!-- Language Switch -->
+    <div class="card" style="padding:12px 14px;margin-bottom:12px">
+      <div class="row">
+        <div>
+          <div class="place" style="font-size:14px">${t('profile.language')}</div>
+          <div class="meta">${t('profile.languageDesc')}</div>
+        </div>
+        <div class="segment" id="languageSeg" style="margin:0;width:auto;min-width:140px">
+          <button class="seg ${ctx.language === 'zh' ? 'active' : ''}" data-lang="zh">中文</button>
+          <button class="seg ${ctx.language === 'en' ? 'active' : ''}" data-lang="en">EN</button>
+        </div>
+      </div>
     </div>
 
     <!-- Profile tabs -->
     <div class="chips" id="profileChips">
-      <button class="chip ${profileTab === 'equipment' ? 'active' : ''}" data-ptab="equipment">Equipment</button>
-      <button class="chip ${profileTab === 'records' ? 'active' : ''}" data-ptab="records">Records</button>
-      <button class="chip ${profileTab === 'contributions' ? 'active' : ''}" data-ptab="contributions">Contributions</button>
+      <button class="chip ${profileTab === 'equipment' ? 'active' : ''}" data-ptab="equipment">${t('profile.equipment')}</button>
+      <button class="chip ${profileTab === 'records' ? 'active' : ''}" data-ptab="records">${t('profile.records')}</button>
+      <button class="chip ${profileTab === 'contributions' ? 'active' : ''}" data-ptab="contributions">${t('profile.contributions')}</button>
     </div>
 
     <div id="profileContent"></div>
@@ -119,9 +134,22 @@ export function initProfilePage(): void {
     renderProfileContent();
   });
 
+  // Language switch
+  document.getElementById('languageSeg')?.addEventListener('click', (e) => {
+    const seg = (e.target as HTMLElement).closest('.seg') as HTMLElement;
+    if (!seg) return;
+    const lang = seg.dataset.lang as 'zh' | 'en';
+    if (lang && lang !== ctx.language) {
+      ctx.language = lang;
+      persistContext();
+      // Full page re-render to apply language
+      (window as any).reloadCurrentPage?.();
+    }
+  });
+
   // Settings
   document.getElementById('profileSettings')?.addEventListener('click', () => {
-    (window as any).toast?.('Settings coming soon');
+    (window as any).toast?.(ctx.language === 'zh' ? '设置功能开发中' : 'Settings coming soon');
   });
 
   renderProfileContent();
@@ -165,33 +193,33 @@ function renderEquipmentSection(): string {
   }).join('');
 
   return `
-    <div class="section"><h3>My equipment</h3><button style="color:var(--blue);font-size:12px;border:0;background:transparent" id="editEquipment">Edit</button></div>
+    <div class="section"><h3>${t('profile.myEquip')}</h3><button style="color:var(--blue);font-size:12px;border:0;background:transparent" id="editEquipment">${t('profile.edit')}</button></div>
     ${equipmentCards.length > 0 ? equipmentCards : `
       <div class="card"><div class="meta" style="text-align:center;padding:20px 0">
-        No equipment configured. Tap Edit to add your gear.
+        ${t('profile.noEquip')}
       </div></div>`}
 
-    <div class="section"><h3>Quick add</h3><span class="page-sub">Common presets</span></div>
+    <div class="section"><h3>${t('profile.quickAdd')}</h3><span class="page-sub">${t('profile.commonPresets')}</span></div>
     <div class="grid-2">
       <div class="card clickable" style="text-align:center" data-preset="naked">
         <div style="font-size:28px;margin-bottom:4px">👁</div>
-        <div style="font-size:13px;font-weight:800">Naked eye</div>
-        <div class="meta">Default mode</div>
+        <div style="font-size:13px;font-weight:800">${t('profile.nakedEye')}</div>
+        <div class="meta">${t('profile.defaultMode')}</div>
       </div>
       <div class="card clickable" style="text-align:center" data-preset="binocular">
         <div style="font-size:28px;margin-bottom:4px">🔭</div>
-        <div style="font-size:13px;font-weight:800">10×50 binoculars</div>
-        <div class="meta">Most versatile</div>
+        <div style="font-size:13px;font-weight:800">10×50</div>
+        <div class="meta">${t('profile.mostVersatile')}</div>
       </div>
       <div class="card clickable" style="text-align:center" data-preset="camera">
         <div style="font-size:28px;margin-bottom:4px">📷</div>
-        <div style="font-size:13px;font-weight:800">Wide camera</div>
+        <div style="font-size:13px;font-weight:800">${ctx.language === 'zh' ? '广角相机' : 'Wide camera'}</div>
         <div class="meta">24mm f/1.8</div>
       </div>
       <div class="card clickable" style="text-align:center" data-preset="telescope">
         <div style="font-size:28px;margin-bottom:4px">🔭</div>
-        <div style="font-size:13px;font-weight:800">8" Dobsonian</div>
-        <div class="meta">Deep sky king</div>
+        <div style="font-size:13px;font-weight:800">8" Dob</div>
+        <div class="meta">${t('profile.deepSkyKing')}</div>
       </div>
     </div>
   `;
@@ -202,14 +230,13 @@ function initEquipmentSection() {
     (window as any).openModal?.('equipmentModal');
   });
 
-  // Preset quick-add
   document.querySelectorAll('[data-preset]').forEach(el => {
     el.addEventListener('click', () => {
       const preset = (el as HTMLElement).dataset.preset;
       let newItem: EquipmentItem | null = null;
       switch (preset) {
         case 'naked':
-          newItem = { id: 'naked', type: 'naked_eye', label: 'Naked eye' };
+          newItem = { id: 'naked', type: 'naked_eye', label: t('profile.nakedEye') };
           break;
         case 'binocular':
           newItem = { id: 'binoc-1', type: 'binoculars', label: '10×50 binoculars', magnification: 10, apertureMm: 50 };
@@ -222,20 +249,18 @@ function initEquipmentSection() {
           break;
       }
       if (newItem) {
-        // Don't add duplicate
         if (!ctx.equipment.items.some(i => i.type === newItem!.type && i.label === newItem!.label)) {
           ctx.equipment.items.push(newItem);
           persistContext();
-          (window as any).toast?.(`${newItem.label} added`);
+          (window as any).toast?.(`${newItem.label} ${ctx.language === 'zh' ? '已添加' : 'added'}`);
           renderProfileContent();
         } else {
-          (window as any).toast?.('Already in your equipment');
+          (window as any).toast?.(t('profile.alreadyAdded'));
         }
       }
     });
   });
 
-  // Click equipment card → edit via modal
   document.querySelectorAll('[data-equip-id]').forEach(el => {
     el.addEventListener('click', () => {
       (window as any).openModal?.('equipmentModal');
@@ -244,19 +269,21 @@ function initEquipmentSection() {
 }
 
 function getEquipmentDetails(item: EquipmentItem): string {
+  const isZh = (ctx.language || 'zh') === 'zh';
   switch (item.type) {
     case 'naked_eye':
-      return 'Default observation mode';
+      return t('profile.defaultMode');
     case 'binoculars':
-      return `${item.magnification || 10}× magnification · ${item.apertureMm || 50} mm aperture`;
+      return `${item.magnification || 10}× ${isZh ? '倍率' : 'magnification'} · ${item.apertureMm || 50}mm ${isZh ? '口径' : 'aperture'}`;
     case 'telescope':
       return `${item.telescopeType || 'Reflector'} · ${item.apertureMm || 150}mm · ${item.focalLengthMm || 750}mm`;
     case 'camera':
-      return `${item.sensorType === 'full_frame' ? 'Full frame' : item.sensorType === 'aps_c' ? 'APS-C' : 'MFT'} · ${item.lensFocalLengthMm || 24}mm · f/${item.maxAperture || 1.8}${item.tracking && item.tracking !== 'none' ? ` · ${item.tracking === 'star_tracker' ? 'Star tracker' : 'EQ mount'}` : ''}`;
+      const sensor = item.sensorType === 'full_frame' ? (isZh ? '全画幅' : 'Full frame') : item.sensorType === 'aps_c' ? 'APS-C' : 'MFT';
+      return `${sensor} · ${item.lensFocalLengthMm || 24}mm · f/${item.maxAperture || 1.8}${item.tracking && item.tracking !== 'none' ? ` · ${item.tracking === 'star_tracker' ? (isZh ? '星迹仪' : 'Star tracker') : (isZh ? '赤道仪' : 'EQ mount')}` : ''}`;
     case 'phone':
-      return item.phoneModel || 'Smartphone camera';
+      return item.phoneModel || (isZh ? '手机相机' : 'Smartphone camera');
     default:
-      return 'Observation equipment';
+      return isZh ? '观测设备' : 'Observation equipment';
   }
 }
 
@@ -267,30 +294,31 @@ function renderRecordsSection(): string {
   const totalTargets = records.reduce((sum, r) => sum + r.targets.length, 0);
 
   return `
-    <div class="section"><h3>Summary</h3><span class="page-sub">All time</span></div>
+    <div class="section"><h3>${t('profile.summary')}</h3><span class="page-sub">${t('profile.allTime')}</span></div>
     <div class="grid-2" style="margin-bottom:12px">
       <div class="fact">
-        <div class="label">Total sessions</div>
+        <div class="label">${t('profile.totalSessions')}</div>
         <div class="value">${totalVisits}</div>
       </div>
       <div class="fact">
-        <div class="label">Targets observed</div>
+        <div class="label">${t('profile.targetsObserved')}</div>
         <div class="value">${totalTargets}</div>
       </div>
     </div>
 
-    <div class="section"><h3>Observation log</h3><button style="color:var(--blue);font-size:12px;border:0;background:transparent" id="addRecord">＋ Add</button></div>
+    <div class="section"><h3>${t('profile.obsLog')}</h3><button style="color:var(--blue);font-size:12px;border:0;background:transparent" id="addRecord">${t('profile.add')}</button></div>
     ${records.length > 0 ? records.map(r => {
-      const targetBadges = r.targets.map(t => {
-        const typeInfo = typeToInfo(t.type);
-        return `<span class="badge ${typeInfo.cls}">${t.name}</span>`;
+      const targetBadges = r.targets.map(t2 => {
+        const typeInfo = typeToInfo(t2.type);
+        const name = ctx.language === 'en' ? (tCat(t2.id, 'name') || t2.name) : t2.name;
+        return `<span class="badge ${typeInfo.cls}">${name}</span>`;
       }).join('');
       return `
         <div class="card clickable" data-record-id="${r.id}">
           <div class="row">
             <div>
               <div class="place">${r.locationName}</div>
-              <div class="meta">${r.date} · ${r.startTime}–${r.endTime || '?'} · Bortle ${r.bortle}${r.weatherScore ? ` · Weather ${r.weatherScore}` : ''}</div>
+              <div class="meta">${r.date} · ${r.startTime}–${r.endTime || '?'} · Bortle ${r.bortle}${r.weatherScore ? ` · ${ctx.language === 'zh' ? '天气' : 'Weather'} ${r.weatherScore}` : ''}</div>
             </div>
             <span style="color:var(--muted);font-size:18px">›</span>
           </div>
@@ -299,14 +327,13 @@ function renderRecordsSection(): string {
         </div>`;
     }).join('') : `
       <div class="card"><div class="meta" style="text-align:center;padding:20px 0">
-        No observation records yet. Start your first session!
+        ${t('profile.noRecords')}
       </div></div>`}
   `;
 }
 
 function initRecordsSection() {
   document.getElementById('addRecord')?.addEventListener('click', () => {
-    // Create a new record from current context
     const newRecord: ObservationRecord = {
       id: `rec-${Date.now()}`,
       date: ctx.date.toISOString().split('T')[0],
@@ -320,15 +347,13 @@ function initRecordsSection() {
     const records = loadRecords();
     records.unshift(newRecord);
     saveRecords(records);
-    (window as any).toast?.('New session started');
+    (window as any).toast?.(t('profile.newSession'));
     renderProfileContent();
   });
 
-  // Record card click → view detail (future: expand inline)
   document.querySelectorAll('[data-record-id]').forEach(el => {
     el.addEventListener('click', () => {
-      const id = (el as HTMLElement).dataset.recordId;
-      (window as any).toast?.(`Session detail coming soon`);
+      (window as any).toast?.(ctx.language === 'zh' ? '会话详情开发中' : 'Session detail coming soon');
     });
   });
 }
@@ -337,55 +362,59 @@ function initRecordsSection() {
 function renderContributionsSection(): string {
   const acceptedCount = SAMPLE_CONTRIBUTIONS.filter(c => c.status === 'accepted' || c.status === 'verified').length;
   const verifiedCount = SAMPLE_CONTRIBUTIONS.filter(c => c.status === 'verified').length;
-  const level = acceptedCount >= 5 ? 'Founding Explorer' : acceptedCount >= 3 ? 'Explorer' : 'Observer';
+  const level = acceptedCount >= 5
+    ? (ctx.language === 'zh' ? '创始探索者' : 'Founding Explorer')
+    : acceptedCount >= 3
+      ? (ctx.language === 'zh' ? '探索者' : 'Explorer')
+      : (ctx.language === 'zh' ? '观测者' : 'Observer');
   const lifetimeEligible = acceptedCount >= 3;
 
+  const statusBadge = (c: ContributionRecord) => {
+    if (c.status === 'verified') return `<span class="badge good">${t('status.verified')}</span>`;
+    if (c.status === 'accepted') return `<span class="badge good">${t('status.accepted')}</span>`;
+    return `<span class="badge warn">${c.confirmCount || 0} / 3</span>`;
+  };
+
   return `
-    <div class="section"><h3>Contribution status</h3><span class="page-sub">${level}</span></div>
+    <div class="section"><h3>${t('profile.contribStatus')}</h3><span class="page-sub">${level}</span></div>
     <div class="card">
       <div class="row">
         <div>
           <div class="place">${level}</div>
-          <div class="meta">${acceptedCount} accepted contributions · ${verifiedCount} verified visits</div>
+          <div class="meta">${acceptedCount} ${ctx.language === 'zh' ? '条已采纳贡献' : 'accepted contributions'} · ${verifiedCount} ${ctx.language === 'zh' ? '次已验证访问' : 'verified visits'}</div>
         </div>
-        ${lifetimeEligible ? '<span class="badge official">Lifetime eligible</span>' : '<span class="badge">3+ for lifetime</span>'}
+        ${lifetimeEligible ? `<span class="badge official">${t('profile.lifetime')}</span>` : `<span class="badge">${t('profile.forLifetime')}</span>`}
       </div>
     </div>
 
-    <div class="section"><h3>Recent contributions</h3><span class="page-sub">Community maintained</span></div>
-    ${SAMPLE_CONTRIBUTIONS.map(c => {
-      const statusBadge = c.status === 'verified'
-        ? '<span class="badge good">Verified</span>'
-        : c.status === 'accepted'
-          ? '<span class="badge good">Accepted</span>'
-          : `<span class="badge warn">${c.confirmCount || 0} / 3</span>`;
-      return `
-        <div class="card">
-          <div class="row">
-            <div>
-              <div class="place">${c.siteName}</div>
-              <div class="meta">${c.date} · ${c.type}</div>
-            </div>
-            ${statusBadge}
+    <div class="section"><h3>${t('profile.recentContrib')}</h3><span class="page-sub">${t('profile.community')}</span></div>
+    ${SAMPLE_CONTRIBUTIONS.map(c => `
+      <div class="card">
+        <div class="row">
+          <div>
+            <div class="place">${c.siteName}</div>
+            <div class="meta">${c.date} · ${c.type}</div>
           </div>
-        </div>`;
-    }).join('')}
+          ${statusBadge(c)}
+        </div>
+      </div>
+    `).join('')}
 
-    <div class="section"><h3>How it works</h3></div>
+    <div class="section"><h3>${t('profile.howItWorks')}</h3></div>
     <div class="card">
       <div class="list-line" style="padding:11px 0;border-bottom:1px solid rgba(92,110,140,.22)">
-        <div class="row"><strong>1</strong><div class="meta" style="margin-left:8px">Visit a dark site and report conditions</div></div>
+        <div class="row"><strong>1</strong><div class="meta" style="margin-left:8px">${t('profile.step1')}</div></div>
       </div>
       <div class="list-line" style="padding:11px 0;border-bottom:1px solid rgba(92,110,140,.22)">
-        <div class="row"><strong>2</strong><div class="meta" style="margin-left:8px">Get 3 independent confirmations → Verified</div></div>
+        <div class="row"><strong>2</strong><div class="meta" style="margin-left:8px">${t('profile.step2')}</div></div>
       </div>
       <div class="list-line" style="padding:11px 0">
-        <div class="row"><strong>3</strong><div class="meta" style="margin-left:8px">3+ accepted → Lifetime founding status</div></div>
+        <div class="row"><strong>3</strong><div class="meta" style="margin-left:8px">${t('profile.step3')}</div></div>
       </div>
     </div>
 
     <div style="margin-top:16px">
-      <button class="primary-btn" id="startContribute">＋ Contribute to a site</button>
+      <button class="primary-btn" id="startContribute">${t('profile.contributeBtn')}</button>
     </div>
   `;
 }
@@ -393,12 +422,12 @@ function renderContributionsSection(): string {
 // ===== Helpers =====
 function typeToInfo(type: string): { cls: string; label: string } {
   const map: Record<string, { cls: string; label: string }> = {
-    planet:  { cls: 'warn', label: 'Planet' },
-    moon:    { cls: '', label: 'Moon' },
-    star:    { cls: 'good', label: 'Star' },
-    deepSky: { cls: 'official', label: 'Deep Sky' },
-    milkyway:{ cls: 'good', label: 'MW' },
-    meteor:  { cls: 'warn', label: 'Meteor' },
+    planet:  { cls: 'warn', label: t('type.planet') },
+    moon:    { cls: '', label: t('type.moon') },
+    star:    { cls: 'good', label: t('type.star') },
+    deepSky: { cls: 'official', label: t('type.deepSky') },
+    milkyway:{ cls: 'good', label: t('type.milkyway') },
+    meteor:  { cls: 'warn', label: t('type.meteor') },
   };
   return map[type] || { cls: '', label: type };
 }

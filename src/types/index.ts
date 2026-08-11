@@ -2,6 +2,8 @@
 export interface GeoCoord { lat: number; lon: number; }
 
 // ===== Observation Context (shared across all pages) =====
+export type AppLanguage = 'zh' | 'en';
+
 export interface ObservationContext {
   location: ObservationLocation;
   date: Date;            // selected observation date
@@ -9,6 +11,7 @@ export interface ObservationContext {
   planningMode: 'single' | 'weekend' | 'month';
   activeTarget: string;  // filter key: 'all' | 'milkyway' | 'meteor' | 'moon' | 'planets'
   equipment: EquipmentSet;
+  language: AppLanguage;
 }
 
 // ===== Location =====
@@ -25,7 +28,7 @@ export interface ObservationLocation {
 export interface DirectionSky {
   azimuth: number;        // 0-360
   name: string;           // N / NE / E / SE / S / SW / W / NW
-  labelZh: string;        // 北 / 东北 / 东 / 东南 / 南 / 西南 / 西 / 西北
+  label: string;            // direction label (localized)
   score: number;          // 0-100 visibility score for this direction
   objects: DirectionObject[];
   horizonClear: boolean;  // terrain horizon clear?

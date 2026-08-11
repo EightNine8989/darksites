@@ -1,5 +1,5 @@
 import type {
-  ObservationContext, ObservationLocation, EquipmentSet, EquipmentItem
+  ObservationContext, ObservationLocation, EquipmentSet, EquipmentItem, AppLanguage
 } from '../types';
 
 // ===== Global Observation Context =====
@@ -28,7 +28,8 @@ export const ctx: ObservationContext = {
   startTime: '22:00',
   planningMode: 'single',
   activeTarget: 'all',
-  equipment: { ...defaultEquipment }
+  equipment: { ...defaultEquipment },
+  language: 'zh'
 };
 
 export function updateContext(partial: Partial<ObservationContext>) {
@@ -46,7 +47,8 @@ const KEYS = {
   location: 'ds_location',
   equipment: 'ds_equipment',
   date: 'ds_date',
-  time: 'ds_time'
+  time: 'ds_time',
+  language: 'ds_language'
 };
 
 export function persistContext() {
@@ -55,6 +57,7 @@ export function persistContext() {
     localStorage.setItem(KEYS.equipment, JSON.stringify(ctx.equipment));
     localStorage.setItem(KEYS.date, ctx.date.toISOString());
     localStorage.setItem(KEYS.time, ctx.startTime);
+    localStorage.setItem(KEYS.language, ctx.language);
   } catch { /* ignore */ }
 }
 
@@ -68,6 +71,8 @@ export function restoreContext() {
     if (d) ctx.date = new Date(d);
     const t = localStorage.getItem(KEYS.time);
     if (t) ctx.startTime = t;
+    const l = localStorage.getItem(KEYS.language);
+    if (l === 'zh' || l === 'en') ctx.language = l;
   } catch { /* ignore */ }
 }
 
@@ -81,8 +86,9 @@ export function isTonight(): boolean {
 }
 
 export function formatDateShort(): string {
-  if (isTonight()) return 'Tonight';
-  return ctx.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const isZh = (ctx.language || 'zh') === 'zh';
+  if (isTonight()) return isZh ? '今晚' : 'Tonight';
+  return ctx.date.toLocaleDateString(isZh ? 'zh-CN' : 'en-US', { month: 'short', day: 'numeric' });
 }
 
 export function equipmentSummary(): string {

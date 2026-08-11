@@ -6,17 +6,18 @@ import { celestialCatalog } from '../lib/catalog';
 import { computePosition, computeMoonPhase, computeSunInfo, groupByDirection } from '../lib/astronomy';
 import { fetchHourlyWeather, computeHourlyScore, findBestWindow } from '../lib/weather';
 import { DARK_SKY_PLACES } from '../lib/dark-sky-places';
+import { t, tCat } from '../lib/i18n';
 
 // ===== 8 方位定义 =====
 const DIRECTIONS = [
-  { key: 'N',  labelZh: '北', azimuth: 0 },
-  { key: 'NE', labelZh: '东北', azimuth: 45 },
-  { key: 'E',  labelZh: '东', azimuth: 90 },
-  { key: 'SE', labelZh: '东南', azimuth: 135 },
-  { key: 'S',  labelZh: '南', azimuth: 180 },
-  { key: 'SW', labelZh: '西南', azimuth: 225 },
-  { key: 'W',  labelZh: '西', azimuth: 270 },
-  { key: 'NW', labelZh: '西北', azimuth: 315 },
+  { key: 'N',  labelZh: '北', labelEn: 'N', azimuth: 0 },
+  { key: 'NE', labelZh: '东北', labelEn: 'NE', azimuth: 45 },
+  { key: 'E',  labelZh: '东', labelEn: 'E', azimuth: 90 },
+  { key: 'SE', labelZh: '东南', labelEn: 'SE', azimuth: 135 },
+  { key: 'S',  labelZh: '南', labelEn: 'S', azimuth: 180 },
+  { key: 'SW', labelZh: '西南', labelEn: 'SW', azimuth: 225 },
+  { key: 'W',  labelZh: '西', labelEn: 'W', azimuth: 270 },
+  { key: 'NW', labelZh: '西北', labelEn: 'NW', azimuth: 315 },
 ];
 
 // ===== State =====
@@ -35,8 +36,8 @@ export function renderSitesPage(): string {
   return `
     <div class="page-top">
       <div>
-        <div class="page-sub">Where to look tonight</div>
-        <h1>Sites</h1>
+        <div class="page-sub">${t('sites.sub')}</div>
+        <h1>${t('sites.title')}</h1>
       </div>
       <button class="icon-btn" id="sitesContribute">＋</button>
     </div>
@@ -44,27 +45,27 @@ export function renderSitesPage(): string {
     <div class="date-bar">
       <button class="date-btn" id="sitesDateBtn">
         <strong>${dateLabel} · ${ctx.startTime}</strong>
-        <span>Change date & time</span>
+        <span>${t('sites.changeDate')}</span>
       </button>
       <button class="date-btn" id="sitesEquipBtn">
         <strong>${equipLabel}</strong>
-        <span>Your equipment</span>
+        <span>${t('sites.yourEquip')}</span>
       </button>
     </div>
 
     <div class="hero-card">
-      <h2>Look this way</h2>
-      <p>Each direction shows what's visible tonight. Scores change with date, Moon, weather and your equipment.</p>
+      <h2>${t('sites.heroTitle')}</h2>
+      <p>${t('sites.heroDesc')}</p>
       <div class="search">
-        <input id="sitesSearch" placeholder="Search object">
+        <input id="sitesSearch" placeholder="${t('sites.search')}">
         <button id="sitesSearchBtn">⌕</button>
       </div>
       <div class="chips" id="sitesChips">
-        <button class="chip ${ctx.activeTarget === 'all' ? 'active' : ''}" data-target="all">All</button>
-        <button class="chip ${ctx.activeTarget === 'milkyway' ? 'active' : ''}" data-target="milkyway">Milky Way</button>
-        <button class="chip ${ctx.activeTarget === 'meteor' ? 'active' : ''}" data-target="meteor">Meteor Shower</button>
-        <button class="chip ${ctx.activeTarget === 'moon' ? 'active' : ''}" data-target="moon">Moon</button>
-        <button class="chip ${ctx.activeTarget === 'planets' ? 'active' : ''}" data-target="planets">Planets</button>
+        <button class="chip ${ctx.activeTarget === 'all' ? 'active' : ''}" data-target="all">${t('filter.all')}</button>
+        <button class="chip ${ctx.activeTarget === 'milkyway' ? 'active' : ''}" data-target="milkyway">${t('filter.milkyway')}</button>
+        <button class="chip ${ctx.activeTarget === 'meteor' ? 'active' : ''}" data-target="meteor">${t('filter.meteor')}</button>
+        <button class="chip ${ctx.activeTarget === 'moon' ? 'active' : ''}" data-target="moon">${t('filter.moon')}</button>
+        <button class="chip ${ctx.activeTarget === 'planets' ? 'active' : ''}" data-target="planets">${t('filter.planets')}</button>
       </div>
     </div>
 
@@ -76,8 +77,8 @@ export function renderSitesPage(): string {
 
     <!-- Nearby dark sites -->
     <div class="section">
-      <h3>Nearby dark sites</h3>
-      <span class="page-sub">For ${dateLabel}</span>
+      <h3>${t('sites.nearby')}</h3>
+      <span class="page-sub">${t('sites.forDate')} ${dateLabel}</span>
     </div>
     <div id="nearbySites"></div>
   `;
@@ -131,7 +132,7 @@ function destroySitesPage(): void {
 async function recalculate() {
   const container = document.getElementById('compassContainer');
   if (!container) return;
-  container.innerHTML = '<div class="loading"><div class="spinner"></div><span>Calculating sky...</span></div>';
+  container.innerHTML = '<div class="loading"><div class="spinner"></div><span>' + t('general.calculating') + '</span></div>';
 
   try {
     const loc = { lat: ctx.location.lat, lon: ctx.location.lon };
@@ -193,7 +194,7 @@ async function recalculate() {
       }
 
       return {
-        azimuth: d.azimuth, name: d.key, labelZh: d.labelZh,
+        azimuth: d.azimuth, name: d.key,         label: ctx.language === 'zh' ? d.labelZh : d.labelEn,
         score: Math.max(0, Math.min(100, score)),
         objects: objs, horizonClear: objs.some(o => o.altitude > 10)
       };
@@ -203,17 +204,17 @@ async function recalculate() {
     renderNearbySites();
   } catch (err) {
     console.error('recalculate error:', err);
-    container.innerHTML = '<div class="loading"><span>Calculation failed, retrying...</span></div>';
+    container.innerHTML = '<div class="loading"><span>' + t('general.calcFailed') + '</span></div>';
   }
 }
 
 function filterByTarget(type: CelestialCategory): boolean {
-  const t = ctx.activeTarget;
-  if (t === 'all') return true;
-  if (t === 'milkyway') return type === 'milkyway';
-  if (t === 'meteor') return type === 'meteor';
-  if (t === 'moon') return type === 'moon';
-  if (t === 'planets') return type === 'planet';
+  const target = ctx.activeTarget;
+  if (target === 'all') return true;
+  if (target === 'milkyway') return type === 'milkyway';
+  if (target === 'meteor') return type === 'meteor';
+  if (target === 'moon') return type === 'moon';
+  if (target === 'planets') return type === 'planet';
   return true;
 }
 
@@ -237,10 +238,10 @@ function renderCompass() {
   const dirsHtml = directionSkies.map(d => {
     const scoreClass = d.score >= 70 ? 'great' : d.score >= 40 ? 'ok' : d.score >= 20 ? 'meh' : 'bad';
     const objCount = d.objects.length;
-    const topObj = d.objects[0]?.name || '';
+    const topObj = d.objects[0] ? (tCat(d.objects[0].id, 'name') || d.objects[0].name) : '';
     return `
       <div class="compass-dir ${activeDirection === d.name ? 'active' : ''}" data-dir="${d.name}">
-        <span class="dir-label">${d.labelZh}</span>
+        <span class="dir-label">${d.label}</span>
         <span class="dir-score score ${scoreClass}">${d.score}</span>
         <span class="dir-objects">${objCount > 0 ? topObj + (objCount > 1 ? ` +${objCount - 1}` : '') : '—'}</span>
       </div>`;
@@ -291,12 +292,13 @@ function renderDirectionDetail() {
 
   const objCards = sky.objects.map(o => {
     const typeBadge = typeToBadge(o.type);
+    const objName = tCat(o.id, 'name') || o.name;
     return `
       <div class="card clickable" data-object="${o.id}">
         <div class="row">
           <div>
-            <div class="place">${o.name}</div>
-            <div class="meta">Alt ${o.altitude.toFixed(0)}° · Best ${o.bestTime}</div>
+            <div class="place">${objName}</div>
+            <div class="meta">${ctx.language === 'zh' ? '高度' : 'Alt'} ${o.altitude.toFixed(0)}° · ${ctx.language === 'zh' ? '最佳' : 'Best'} ${o.bestTime}</div>
           </div>
           <span class="badge ${typeBadge.cls}">${typeBadge.label}</span>
         </div>
@@ -305,10 +307,10 @@ function renderDirectionDetail() {
 
   container.innerHTML = `
     <div class="section">
-      <h3>${sky.labelZh} direction</h3>
-      <span class="page-sub">${sky.objects.length} object${sky.objects.length !== 1 ? 's' : ''} visible</span>
+      <h3>${sky.label} ${ctx.language === 'zh' ? '方向' : 'direction'}</h3>
+      <span class="page-sub">${sky.objects.length} ${t('sites.directionObj')}</span>
     </div>
-    ${sky.objects.length > 0 ? objCards : '<div class="card"><div class="meta" style="text-align:center;padding:20px 0">No bright objects in this direction tonight</div></div>'}
+    ${sky.objects.length > 0 ? objCards : '<div class="card"><div class="meta" style="text-align:center;padding:20px 0">' + t('sites.noObjects') + '</div></div>'}
   `;
 
   // Object card click → navigate to object detail
@@ -337,13 +339,13 @@ function renderNearbySites() {
     .slice(0, 5);
 
   if (sites.length === 0) {
-    container.innerHTML = '<div class="card"><div class="meta" style="text-align:center;padding:20px 0">No known dark sites nearby</div></div>';
+    container.innerHTML = '<div class="card"><div class="meta" style="text-align:center;padding:20px 0">' + t('sites.noSites') + '</div></div>';
     return;
   }
 
   container.innerHTML = sites.map(s => {
     const statusClass = s.yearCert ? 'official' : 'good';
-    const statusLabel = s.yearCert ? 'Official' : 'Suggested';
+    const statusLabel = s.yearCert ? t('status.official') : t('status.suggested');
     return `
       <div class="card clickable" data-site-name="${s.name}">
         <div class="row">
@@ -378,12 +380,12 @@ function scoreClass(bortle: number): string {
 
 function typeToBadge(type: string): { cls: string; label: string } {
   const map: Record<string, { cls: string; label: string }> = {
-    planet: { cls: 'warn', label: 'Planet' },
-    moon: { cls: '', label: 'Moon' },
-    star: { cls: 'good', label: 'Star' },
-    deepSky: { cls: 'official', label: 'Deep Sky' },
-    milkyway: { cls: 'good', label: 'Milky Way' },
-    meteor: { cls: 'warn', label: 'Meteor' },
+    planet: { cls: 'warn', label: t('type.planet') },
+    moon: { cls: '', label: t('type.moon') },
+    star: { cls: 'good', label: t('type.star') },
+    deepSky: { cls: 'official', label: t('type.deepSky') },
+    milkyway: { cls: 'good', label: t('type.milkyway') },
+    meteor: { cls: 'warn', label: t('type.meteor') },
   };
   return map[type] || { cls: '', label: type };
 }
@@ -398,7 +400,7 @@ function highlightDirectionForObject(q: string) {
       return;
     }
   }
-  (window as any).toast?.('Object not found in current view');
+  (window as any).toast?.(ctx.language === 'zh' ? '未找到天体' : 'Object not found in current view');
 }
 
 function updateDateBar() {

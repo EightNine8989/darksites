@@ -2,6 +2,7 @@
 import './styles/global.css';
 import { ctx, restoreContext, persistContext, updateContext, onContextChange } from './lib/context';
 import { getCurrentLocation, getGPSLocation } from './lib/location';
+import { t } from './lib/i18n';
 import { renderSitesPage, initSitesPage } from './pages/sites';
 import { renderObjectsPage, initObjectsPage } from './pages/objects';
 import { renderObjectDetailPage, initObjectDetailPage } from './pages/object-detail';
@@ -48,21 +49,42 @@ function switchTab(tab: TabId) {
   currentTab = tab;
   navStack = [{ type: 'tab', tab }]; // reset stack on tab switch
   renderCurrentPage();
-  // Update tab bar
-  document.querySelectorAll('.tab').forEach(t => {
-    t.classList.toggle('active', (t as HTMLElement).dataset.tab === tab);
+  updateTabBarLabels();
+  document.querySelectorAll('.tab').forEach(el => {
+    el.classList.toggle('active', (el as HTMLElement).dataset.tab === tab);
   });
   updateTabBarVisibility();
+}
+
+function updateTabBarLabels() {
+  document.querySelectorAll('.tab').forEach(el => {
+    const tabEl = el as HTMLElement;
+    const tabId = tabEl.dataset.tab as TabId;
+    const labelMap: Record<TabId, string> = {
+      sites: t('tab.sites'),
+      objects: t('tab.objects'),
+      profile: t('tab.profile'),
+    };
+    // Update only the text node (after the <i> icon)
+    const textNode = tabEl.childNodes[1];
+    if (textNode) textNode.textContent = labelMap[tabId] || tabId;
+  });
 }
 
 function updateTabBarVisibility() {
   const tabBar = document.getElementById('tabBar');
   if (!tabBar) return;
   const route = navStack[navStack.length - 1];
-  // Show tab bar only on tab pages
   const isTabPage = route.type === 'tab';
   tabBar.style.display = isTabPage ? 'flex' : 'none';
 }
+
+// Reload current page (used after language switch)
+function reloadCurrentPage() {
+  updateTabBarLabels();
+  renderCurrentPage();
+}
+(window as any).reloadCurrentPage = reloadCurrentPage;
 
 function renderCurrentPage() {
   const route = navStack[navStack.length - 1];
@@ -72,7 +94,7 @@ function renderCurrentPage() {
 function renderRoute(route: PageRoute) {
   const container = document.getElementById('pageContainer');
   if (!container) return;
-  container.scrollTop = 0; // scroll to top on navigation
+  container.scrollTop = 0;
 
   switch (route.type) {
     case 'tab':
@@ -105,8 +127,6 @@ function renderRoute(route: PageRoute) {
       break;
   }
 }
-
-// Profile placeholder removed — now uses renderProfilePage from pages/profile.ts
 
 // ===== Modal System =====
 function openModal(id: string) {
@@ -143,23 +163,22 @@ function createDateModal(): string {
     <div class="sheet">
       <div class="handle"></div>
       <div class="row">
-        <div><div class="page-sub">Observation time</div><h2>Date & time</h2></div>
+        <div><div class="page-sub">${t('general.obsTime')}</div><h2>${t('general.dateAndTime')}</h2></div>
         <button class="back-btn" onclick="document.getElementById('dateModal').classList.remove('show')">✕</button>
       </div>
-      <div class="field"><label>Date</label><input id="dateInput" type="date" value="${today}"></div>
-      <div class="field"><label>Start time</label><input id="timeInput" type="time" value="${ctx.startTime}"></div>
+      <div class="field"><label>${ctx.language === 'zh' ? '日期' : 'Date'}</label><input id="dateInput" type="date" value="${today}"></div>
+      <div class="field"><label>${ctx.language === 'zh' ? '开始时间' : 'Start time'}</label><input id="timeInput" type="time" value="${ctx.startTime}"></div>
       <div class="segment" id="planMode">
-        <button class="seg active" data-mode="single">Single night</button>
-        <button class="seg" data-mode="weekend">Weekend</button>
-        <button class="seg" data-mode="month">Any date this month</button>
+        <button class="seg active" data-mode="single">${t('general.singleNight')}</button>
+        <button class="seg" data-mode="weekend">${t('general.weekend')}</button>
+        <button class="seg" data-mode="month">${t('general.anyMonth')}</button>
       </div>
-      <button class="primary-btn" id="applyDate">Apply & recalculate</button>
+      <button class="primary-btn" id="applyDate">${t('general.apply')}</button>
     </div>
   </div>`;
 }
 
 function initDateModal() {
-  // Plan mode segment
   document.getElementById('planMode')?.addEventListener('click', (e) => {
     const seg = (e.target as HTMLElement).closest('.seg') as HTMLElement;
     if (!seg) return;
@@ -168,7 +187,6 @@ function initDateModal() {
     updateContext({ planningMode: seg.dataset.mode as any });
   });
 
-  // Apply date
   document.getElementById('applyDate')?.addEventListener('click', () => {
     const dateInput = document.getElementById('dateInput') as HTMLInputElement;
     const timeInput = document.getElementById('timeInput') as HTMLInputElement;
@@ -177,10 +195,9 @@ function initDateModal() {
       persistContext();
     }
     closeModal('dateModal');
-    toast('Date applied · recalculating...');
+    toast(t('general.dateApplied'));
   });
 
-  // Click backdrop to close
   document.getElementById('dateModal')?.addEventListener('click', (e) => {
     if (e.target === document.getElementById('dateModal')) closeModal('dateModal');
   });
@@ -188,75 +205,73 @@ function initDateModal() {
 
 // ===== Equipment Modal =====
 function createEquipmentModal(): string {
+  const isZh = (ctx.language || 'zh') === 'zh';
   return `
   <div id="equipmentModal" class="modal">
     <div class="sheet">
       <div class="handle"></div>
       <div class="row">
-        <div><div class="page-sub">Observer profile</div><h2>Observation equipment</h2></div>
+        <div><div class="page-sub">${t('general.equipProfile')}</div><h2>${t('general.obsEquipment')}</h2></div>
         <button class="back-btn" onclick="document.getElementById('equipmentModal').classList.remove('show')">✕</button>
       </div>
       <div class="field">
-        <label>Equipment types</label>
+        <label>${isZh ? '设备类型' : 'Equipment types'}</label>
         <div class="chips" id="equipTypes">
-          <button class="chip active" data-type="naked">Naked eye</button>
-          <button class="chip" data-type="binocular">Binoculars</button>
-          <button class="chip" data-type="telescope">Telescope</button>
-          <button class="chip" data-type="camera">Camera</button>
-          <button class="chip" data-type="phone">Phone</button>
+          <button class="chip active" data-type="naked">${isZh ? '肉眼' : 'Naked eye'}</button>
+          <button class="chip" data-type="binocular">${isZh ? '双筒镜' : 'Binoculars'}</button>
+          <button class="chip" data-type="telescope">${isZh ? '望远镜' : 'Telescope'}</button>
+          <button class="chip" data-type="camera">${isZh ? '相机' : 'Camera'}</button>
+          <button class="chip" data-type="phone">${isZh ? '手机' : 'Phone'}</button>
         </div>
       </div>
       <div id="binocularFields" style="display:none">
-        <div class="page-sub" style="margin:8px 0 4px">Binoculars</div>
+        <div class="page-sub" style="margin:8px 0 4px">${isZh ? '双筒镜' : 'Binoculars'}</div>
         <div class="grid-2">
-          <div class="field"><label>Magnification</label><input value="10×"></div>
-          <div class="field"><label>Aperture</label><input value="50 mm"></div>
+          <div class="field"><label>${isZh ? '倍率' : 'Magnification'}</label><input value="10×"></div>
+          <div class="field"><label>${isZh ? '口径' : 'Aperture'}</label><input value="50 mm"></div>
         </div>
       </div>
       <div id="telescopeFields" style="display:none">
-        <div class="page-sub" style="margin:8px 0 4px">Telescope</div>
-        <div class="field"><label>Type</label>
-          <select><option>Refractor</option><option>Reflector / Dobsonian</option><option>SCT / Maksutov</option><option>Smart telescope</option></select>
+        <div class="page-sub" style="margin:8px 0 4px">${isZh ? '望远镜' : 'Telescope'}</div>
+        <div class="field"><label>${isZh ? '类型' : 'Type'}</label>
+          <select><option>${isZh ? '折射式' : 'Refractor'}</option><option>${isZh ? '反射/道布森' : 'Reflector / Dobsonian'}</option><option>SCT / Maksutov</option><option>${isZh ? '智能望远镜' : 'Smart telescope'}</option></select>
         </div>
         <div class="grid-2">
-          <div class="field"><label>Aperture</label><input placeholder="150 mm"></div>
-          <div class="field"><label>Focal length</label><input placeholder="750 mm"></div>
+          <div class="field"><label>${isZh ? '口径' : 'Aperture'}</label><input placeholder="150 mm"></div>
+          <div class="field"><label>${isZh ? '焦距' : 'Focal length'}</label><input placeholder="750 mm"></div>
         </div>
       </div>
       <div id="cameraFields" style="display:none">
-        <div class="page-sub" style="margin:8px 0 4px">Camera</div>
-        <div class="field"><label>Sensor</label>
-          <select><option>Full frame</option><option>APS-C</option><option>Micro Four Thirds</option><option>1-inch</option></select>
+        <div class="page-sub" style="margin:8px 0 4px">${isZh ? '相机' : 'Camera'}</div>
+        <div class="field"><label>${isZh ? '传感器' : 'Sensor'}</label>
+          <select><option>${isZh ? '全画幅' : 'Full frame'}</option><option>APS-C</option><option>${isZh ? 'M4/3' : 'Micro Four Thirds'}</option><option>1-inch</option></select>
         </div>
         <div class="grid-2">
-          <div class="field"><label>Lens focal length</label><input value="24 mm"></div>
-          <div class="field"><label>Max aperture</label><input value="f/1.8"></div>
+          <div class="field"><label>${isZh ? '镜头焦距' : 'Lens focal length'}</label><input value="24 mm"></div>
+          <div class="field"><label>${isZh ? '最大光圈' : 'Max aperture'}</label><input value="f/1.8"></div>
         </div>
         <div class="segment" id="trackingSeg">
-          <button class="seg active" data-track="none">None</button>
-          <button class="seg" data-track="tracker">Star tracker</button>
-          <button class="seg" data-track="eq">Equatorial mount</button>
+          <button class="seg active" data-track="none">${isZh ? '无' : 'None'}</button>
+          <button class="seg" data-track="tracker">${isZh ? '星迹仪' : 'Star tracker'}</button>
+          <button class="seg" data-track="eq">${isZh ? '赤道仪' : 'Equatorial mount'}</button>
         </div>
       </div>
-      <button class="primary-btn" id="saveEquipment">Save equipment</button>
+      <button class="primary-btn" id="saveEquipment">${isZh ? '保存设备' : 'Save equipment'}</button>
     </div>
   </div>`;
 }
 
 function initEquipmentModal() {
-  // Toggle equipment type chips
   document.getElementById('equipTypes')?.addEventListener('click', (e) => {
     const chip = (e.target as HTMLElement).closest('.chip') as HTMLElement;
     if (!chip) return;
     chip.classList.toggle('active');
     const type = chip.dataset.type;
-    // Show/hide fields
     if (type === 'binocular') toggle('binocularFields', chip.classList.contains('active'));
     if (type === 'telescope') toggle('telescopeFields', chip.classList.contains('active'));
     if (type === 'camera') toggle('cameraFields', chip.classList.contains('active'));
   });
 
-  // Save
   document.getElementById('saveEquipment')?.addEventListener('click', () => {
     const activeChips = document.querySelectorAll('#equipTypes .chip.active');
     const labels = [...activeChips].map(c => c.textContent?.trim() || '').filter(Boolean);
@@ -266,10 +281,9 @@ function initEquipmentModal() {
     updateContext({ equipment: { items, primary: items[0].id } });
     persistContext();
     closeModal('equipmentModal');
-    toast('Equipment saved');
+    toast(t('general.equipSaved'));
   });
 
-  // Backdrop close
   document.getElementById('equipmentModal')?.addEventListener('click', (e) => {
     if (e.target === document.getElementById('equipmentModal')) closeModal('equipmentModal');
   });
@@ -298,7 +312,6 @@ async function init() {
     const gpsLoc = await getGPSLocation();
     updateContext({ location: { ...gpsLoc, id: 'current-gps' } });
   } catch {
-    // Fall back to saved location
     const saved = getCurrentLocation();
     updateContext({ location: saved });
   }
@@ -322,6 +335,7 @@ async function init() {
   });
 
   // Initial render
+  updateTabBarLabels();
   renderCurrentPage();
   updateStatusBar();
   setInterval(updateStatusBar, 30000);

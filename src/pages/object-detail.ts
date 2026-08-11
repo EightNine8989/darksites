@@ -5,6 +5,7 @@ import { ctx, onContextChange, formatDateShort } from '../lib/context';
 import { celestialCatalog } from '../lib/catalog';
 import { computePosition, computeMoonPhase } from '../lib/astronomy';
 import { DARK_SKY_PLACES } from '../lib/dark-sky-places';
+import { t, tCat } from '../lib/i18n';
 
 // ===== Season data (shared with objects.ts) =====
 const SEASON_DATA: Record<string, number[]> = {
@@ -67,12 +68,14 @@ const EQUIPMENT_RECS: Record<string, { name: string; detail: string; level: 'rec
   ],
 };
 
-const MONTH_LABELS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const MONTH_LABELS = ctx.language === 'zh'
+    ? ['1','2','3','4','5','6','7','8','9','10','11','12']
+    : ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 // ===== Render =====
 export function renderObjectDetailPage(objectId: string): string {
   const obj = celestialCatalog.find(o => o.id === objectId);
-  if (!obj) return '<div class="card"><div class="meta" style="text-align:center;padding:40px 0">Object not found</div></div>';
+  if (!obj) return '<div class="card"><div class="meta" style="text-align:center;padding:40px 0">' + (ctx.language === 'zh' ? '天体未找到' : 'Object not found') + '</div></div>';
 
   const loc = { lat: ctx.location.lat, lon: ctx.location.lon };
   const [hh, mm] = ctx.startTime.split(':').map(Number);
@@ -98,7 +101,7 @@ export function renderObjectDetailPage(objectId: string): string {
   if (bestMonths.length > 0) {
     const start = MONTH_LABELS[bestMonths[0]];
     const end = MONTH_LABELS[bestMonths[bestMonths.length - 1]];
-    seasonText = start === end ? `Best in ${start}` : `Best from ${start} to ${end}`;
+    seasonText = start === end ? (ctx.language === 'zh' ? `${start}月最佳` : `Best in ${start}`) : (ctx.language === 'zh' ? `${start}–${end}月最佳` : `Best from ${start} to ${end}`);
   }
 
   // Equipment recommendations
@@ -128,19 +131,19 @@ export function renderObjectDetailPage(objectId: string): string {
   const visible = pos.visible && pos.altitude > 0;
   const visScore = visible ? Math.round(Math.min(100, pos.altitude * 1.2 + (obj.magnitude < 0 ? 40 : obj.magnitude < 2 ? 25 : 10))) : 0;
   const scoreCls = visScore >= 70 ? 'great' : visScore >= 40 ? 'ok' : visScore >= 20 ? 'meh' : 'bad';
-  const visLabel = visScore >= 70 ? 'Excellent' : visScore >= 40 ? 'Good' : visScore >= 20 ? 'Fair' : 'Poor';
+  const visLabel = visScore >= 70 ? t('vis.excellent') : visScore >= 40 ? t('vis.good') : visScore >= 20 ? t('vis.fair') : t('vis.poor');
 
   return `
     <div class="page-top">
       <button class="back-btn" id="objDetailBack">‹</button>
-      <div class="page-sub">${obj.constellation !== '—' ? obj.constellation : 'Object'}</div>
+      <div class="page-sub">${obj.constellation !== '—' ? obj.constellation : (ctx.language === 'zh' ? '天体' : 'Object')}</div>
       <button class="icon-btn" id="objDetailSave">♡</button>
     </div>
 
     <div class="hero-card">
-      <div class="page-sub">Seasonal visibility</div>
-      <h1 style="font-size:28px;margin:5px 0">${obj.name}</h1>
-      <div class="meta">${obj.description || ''}</div>
+      <div class="page-sub">${t('objDetail.seasonVis')}</div>
+      <h1 style="font-size:28px;margin:5px 0">${tCat(obj.id, 'name') || obj.name}</h1>
+      <div class="meta">${tCat(obj.id, 'desc') || obj.description || ''}</div>
       <div class="badges" style="margin-top:8px">
         ${(obj.equipment || []).map(e => `<span class="badge">${e}</span>`).join('')}
       </div>
@@ -149,58 +152,58 @@ export function renderObjectDetailPage(objectId: string): string {
     <div class="date-bar">
       <button class="date-btn" id="objDetailDateBtn">
         <strong>${formatDateShort()} · ${ctx.startTime}</strong>
-        <span>Change observing date</span>
+        <span>${t('objDetail.changeDate')}</span>
       </button>
       <button class="date-btn" id="objDetailEquipBtn">
-        <strong>Matched to your gear</strong>
-        <span>Equipment suitability</span>
+        <strong>${ctx.language === 'zh' ? '设备匹配' : 'Matched to your gear'}</strong>
+        <span>${t('objDetail.equipSuit')}</span>
       </button>
     </div>
 
     <!-- Season -->
-    <div class="section"><h3>Best season</h3><span class="page-sub">Relative visibility</span></div>
+    <div class="section"><h3>${t('objDetail.bestSeason')}</h3><span class="page-sub">${t('objDetail.relVis')}</span></div>
     <div class="card">
-      <div style="display:flex;justify-content:space-between"><span class="meta">Jan</span><span class="meta">Dec</span></div>
+      <div style="display:flex;justify-content:space-between"><span class="meta">${ctx.language === 'zh' ? '1月' : 'Jan'}</span><span class="meta">${ctx.language === 'zh' ? '12月' : 'Dec'}</span></div>
       <div class="season">${seasonChart}</div>
-      <div class="meta" style="margin-top:8px">${seasonText ? seasonText + ' · ' : ''}For this latitude, ${obj.name} ${seasonData[currentMonth] >= 3 ? 'is well placed tonight.' : 'may be low tonight — try a different month.'}</div>
+      <div class="meta" style="margin-top:8px">${seasonText ? seasonText + ' · ' : ''}${ctx.language === 'zh' ? '在此纬度，' : 'For this latitude, '}${tCat(obj.id, 'name') || obj.name} ${seasonData[currentMonth] >= 3 ? t('objDetail.wellPlaced') : t('objDetail.lowTonight')}</div>
     </div>
 
     <!-- Visibility tonight -->
-    <div class="section"><h3>Visibility tonight</h3><span class="page-sub">Time-sensitive</span></div>
+    <div class="section"><h3>${t('objDetail.visTonight')}</h3><span class="page-sub">${t('objDetail.timeSensitive')}</span></div>
     <div class="grid-2">
       <div class="fact">
-        <div class="label">Direction</div>
+        <div class="label">${t('objDetail.direction')}</div>
         <div class="value">${visible ? pos.directionText : '—'}</div>
       </div>
       <div class="fact">
-        <div class="label">Altitude</div>
-        <div class="value">${visible ? `${pos.altitude.toFixed(0)}°` : 'Below horizon'}</div>
+        <div class="label">${t('objDetail.altitude')}</div>
+        <div class="value">${visible ? `${pos.altitude.toFixed(0)}°` : (ctx.language === 'zh' ? '地平线下' : 'Below horizon')}</div>
       </div>
       <div class="fact">
-        <div class="label">Best time</div>
+        <div class="label">${t('objDetail.bestTime')}</div>
         <div class="value">${pos.bestTime}</div>
       </div>
       <div class="fact">
-        <div class="label">Moon conflict</div>
-        <div class="value" style="${moonInfo.altitude > 0 && moonInfo.illumination > 0.5 ? 'color:var(--warn)' : 'color:var(--good)'}">${moonConflict}</div>
+        <div class="label">${t('objDetail.moonConflict')}</div>
+        <div class="value" style="${moonInfo.altitude > 0 && moonInfo.illumination > 0.5 ? 'color:var(--warn)' : 'color:var(--good)'}">${moonInfo.altitude > 0 && moonInfo.illumination > 0.5 ? (ctx.language === 'zh' ? `月空 (${moonInfo.phaseName}, ${Math.round(moonInfo.illumination * 100)}%)` : `Moon in sky (${moonInfo.phaseName}, ${Math.round(moonInfo.illumination * 100)}%)`) : t('objDetail.noMoonInterf')}</div>
       </div>
     </div>
 
     ${visible ? `
     <div style="margin:12px 0;text-align:center">
       <div class="score ${scoreCls}" style="width:64px;height:64px;font-size:28px;border-radius:20px;margin:0 auto">${visScore}</div>
-      <div style="margin-top:6px;font-size:13px;color:var(--muted)">${visLabel} visibility</div>
+      <div style="margin-top:6px;font-size:13px;color:var(--muted)">${visLabel} ${ctx.language === 'zh' ? '可见度' : 'visibility'}</div>
     </div>` : `
     <div class="card"><div class="meta" style="text-align:center;padding:12px 0;color:var(--warn)">
-      ${obj.name} is below the horizon at ${ctx.startTime}. Try changing the time or date.
+      ${tCat(obj.id, 'name') || obj.name} ${t('objDetail.belowHorizon')}
     </div></div>`}
 
     <!-- Equipment -->
-    <div class="section"><h3>Suitable equipment</h3><span class="page-sub">Recommended</span></div>
+    <div class="section"><h3>${t('objDetail.equipment')}</h3><span class="page-sub">${t('objDetail.recommended')}</span></div>
     <div class="card">
       ${equipRecs.map((eq, i) => {
         const badgeCls = eq.level === 'great' ? 'good' : eq.level === 'recommended' ? 'good' : '';
-        const badgeLabel = eq.level === 'great' ? 'Great' : eq.level === 'recommended' ? 'Recommended' : 'Optional';
+        const badgeLabel = eq.level === 'great' ? t('equip.great') : eq.level === 'recommended' ? t('equip.recommended') : t('equip.optional');
         return `<div class="list-line${i < equipRecs.length - 1 ? '' : ''}" style="padding:11px 0;${i < equipRecs.length - 1 ? 'border-bottom:1px solid rgba(92,110,140,.22)' : ''}">
           <div class="row">
             <div><strong>${eq.name}</strong><div class="meta">${eq.detail}</div></div>
@@ -211,18 +214,18 @@ export function renderObjectDetailPage(objectId: string): string {
     </div>
 
     <!-- Best places -->
-    <div class="section"><h3>Best places nearby</h3><span class="page-sub">For selected date</span></div>
+    <div class="section"><h3>${t('objDetail.bestPlaces')}</h3><span class="page-sub">${t('objDetail.forDate')}</span></div>
     ${recSites.length > 0 ? recSites.map(s => `
       <div class="card clickable" data-place-lat="${s.lat}" data-place-lon="${s.lon}" data-place-name="${s.name}">
         <div class="row">
           <div>
             <div class="place">${s.name}</div>
-            <div class="meta">${s.distKm} km · Bortle ${s.bortle} · ${s.type}${s.yearCert ? ' · Certified' : ''}</div>
+            <div class="meta">${s.distKm} km · Bortle ${s.bortle} · ${s.type}${s.yearCert ? ' · ' + t('status.official') : ''}</div>
           </div>
           <div class="score ${s.bortle <= 2 ? 'great' : s.bortle <= 4 ? 'ok' : 'meh'}" style="width:40px;height:40px;font-size:16px">${Math.max(10, 100 - s.bortle * 10)}</div>
         </div>
       </div>
-    `).join('') : '<div class="card"><div class="meta" style="text-align:center;padding:12px 0">No dark sites nearby matching this object\'s requirements</div></div>'}
+    `).join('') : '<div class="card"><div class="meta" style="text-align:center;padding:12px 0">' + t('objDetail.noSites') + '</div></div>'}
   `;
 }
 
@@ -240,6 +243,6 @@ export function initObjectDetailPage(): void {
   });
 
   document.getElementById('objDetailSave')?.addEventListener('click', () => {
-    (window as any).toast?.('Saved to favorites');
+    (window as any).toast?.(t('general.saved'));
   });
 }
