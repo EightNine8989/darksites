@@ -17,6 +17,10 @@ body { background: var(--bg-deep); color: var(--text); font-family: -apple-syste
 button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; border: none; background: none; }
 
+/* ===== Hide scrollbar globally ===== */
+* { scrollbar-width: none; } /* Firefox */
+*::-webkit-scrollbar { display: none; } /* Chrome/Safari/Edge */
+
 /* ===== App Shell — 9:16 phone frame ===== */
 #app { width: min(430px, 100vw); height: min(calc(min(100vw, 430px) * 16 / 9), 100vh); margin: 0 auto; position: relative; overflow: hidden; display: flex; flex-direction: column;
   background: radial-gradient(700px 420px at 50% -10%, rgba(82,112,255,.18), transparent 65%), linear-gradient(#080d17, var(--bg) 64%); }
@@ -101,28 +105,8 @@ button { cursor: pointer; border: none; background: none; }
 .fact .label { font-size: 11px; color: var(--muted); }
 .fact .value { font-size: 14px; font-weight: 800; margin-top: 4px; }
 
-/* ===== Compass (Sites core) ===== */
-.compass { position: relative; width: 100%; aspect-ratio: 1; max-width: 340px; margin: 16px auto; }
-.compass-ring { position: absolute; inset: 0; border: 1px solid var(--line); border-radius: 50%; background: radial-gradient(circle, rgba(14,22,37,.9), rgba(5,8,17,.95)); }
-.compass-center { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 28px; height: 28px; border-radius: 50%; background: var(--cta-bg); border: 3px solid #fff; box-shadow: 0 0 0 7px rgba(77,140,255,.15); z-index: 2; }
-.compass-dir { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; transition: all .15s; z-index: 3; }
-.compass-dir .dir-label { font-size: 11px; font-weight: 800; color: var(--muted); }
-.compass-dir .dir-score { font-size: 13px; font-weight: 900; }
-.compass-dir .dir-objects { font-size: 9px; color: var(--dim); }
-.compass-dir.active .dir-label { color: var(--text); }
-.compass-dir.active .dir-score { color: var(--good); }
-/* Direction positioning — on circle circumference */
-.compass-dir[data-dir="N"]  { left: 50%; top: 6%; transform: translate(-50%,-50%); }
-.compass-dir[data-dir="NE"] { left: 82%; top: 18%; transform: translate(-50%,-50%); }
-.compass-dir[data-dir="E"]  { left: 94%; top: 50%; transform: translate(-50%,-50%); }
-.compass-dir[data-dir="SE"] { left: 82%; top: 82%; transform: translate(-50%,-50%); }
-.compass-dir[data-dir="S"]  { left: 50%; top: 94%; transform: translate(-50%,-50%); }
-.compass-dir[data-dir="SW"] { left: 18%; top: 82%; transform: translate(-50%,-50%); }
-.compass-dir[data-dir="W"]  { left: 6%; top: 50%; transform: translate(-50%,-50%); }
-.compass-dir[data-dir="NW"] { left: 18%; top: 18%; transform: translate(-50%,-50%); }
-
 /* ===== Map (Leaflet) ===== */
-.sites-map { height: 200px; border: 1px solid var(--line); border-radius: var(--r-lg); margin: 12px 0; overflow: hidden; position: relative; z-index: 1; }
+.sites-map { height: 220px; border: 1px solid var(--line); border-radius: var(--r-lg); margin: 12px 0; overflow: hidden; position: relative; z-index: 1; }
 .sites-map .leaflet-container { background: #0d1828; border-radius: var(--r-lg); }
 .sites-map .leaflet-tile-pane { filter: brightness(0.7) saturate(0.8); }
 .sites-map .leaflet-control-zoom { display: none; }
@@ -130,6 +114,11 @@ button { cursor: pointer; border: none; background: none; }
 .map-pin-dot { width: 14px; height: 14px; border-radius: 50%; background: var(--cta-bg); border: 2px solid #fff; box-shadow: 0 0 6px rgba(0,0,0,.5); }
 .map-pin-dot.you { background: #4d8cff; box-shadow: 0 0 0 4px rgba(77,140,255,.25); }
 .map-site-label { background: var(--card); color: var(--text); font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 10px; border: 1px solid var(--line); white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,.4); }
+
+/* ===== Site Card with pin number ===== */
+.site-card { display: flex; gap: 12px; align-items: flex-start; }
+.site-pin-num { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 900; color: #050811; flex: 0 0 auto; margin-top: 2px; border: 2px solid rgba(255,255,255,.7); }
+.site-card-body { flex: 1; min-width: 0; }
 
 /* ===== List Line ===== */
 .list-line { padding: 11px 0; border-bottom: 1px solid rgba(92,110,140,.22); }

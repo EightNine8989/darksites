@@ -81,13 +81,7 @@ export function renderSitesPage(): string {
     <!-- Tonight Recommendation -->
     <div id="tonightRec"></div>
 
-    <!-- Compass -->
-    <div id="compassContainer"></div>
-
-    <!-- Direction Detail (shown when a direction is tapped) -->
-    <div id="directionDetail"></div>
-
-    <!-- Nearby dark sites -->
+    <!-- Nearby dark sites (numbered to match map pins) -->
     <div class="section">
       <h3>${t('sites.nearby')}</h3>
       <span class="page-sub">${t('sites.forDate')} ${dateLabel}</span>
@@ -123,7 +117,7 @@ export function initSitesPage(): void {
   // Search
   document.getElementById('sitesSearch')?.addEventListener('input', (e) => {
     const q = (e.target as HTMLInputElement).value.toLowerCase();
-    if (q) highlightDirectionForObject(q);
+    if (q) highlightSite(q);
   });
 
   // Context change listener
@@ -145,10 +139,6 @@ function destroySitesPage(): void {
 
 // ===== Core Computation =====
 async function recalculate() {
-  const container = document.getElementById('compassContainer');
-  if (!container) return;
-  container.innerHTML = '<div class="loading"><div class="spinner"></div><span>' + t('general.calculating') + '</span></div>';
-
   try {
     const loc = { lat: ctx.location.lat, lon: ctx.location.lon };
     // Build observation date from ctx.date + ctx.startTime
@@ -156,13 +146,13 @@ async function recalculate() {
     const obsDate = new Date(ctx.date);
     obsDate.setHours(hh || 22, mm || 0, 0, 0);
 
-    // Compute positions for all objects at observation time
+    // Compute positions for all objects at observation time (used by tonight recommendation)
     const positions = celestialCatalog
       .filter(obj => filterByTarget(obj.type))
       .map(obj => computePosition(obj, loc, obsDate))
       .filter(p => p.visible && p.altitude > 0);
 
-    // Group by direction
+    // Group by direction (still used for tonight picks direction label)
     const dirMap = groupByDirection(positions);
 
     // Fetch weather for scoring
@@ -171,7 +161,7 @@ async function recalculate() {
     const sunInfo = computeSunInfo(obsDate, loc);
     moonPhaseName = moonInfo.phaseName;
 
-    // Build DirectionSky for each direction
+    // Build DirectionSky for each direction (used for tonight picks)
     directionSkies = DIRECTIONS.map(d => {
       const objs = (dirMap.get(d.key) || [])
         .sort((a, b) => b.altitude - a.altitude)
@@ -180,7 +170,6 @@ async function recalculate() {
           altitude: p.altitude, bestTime: p.bestTime, magnitude: p.magnitude, visible: true
         }));
 
-      // Score: base from objects count/quality, modulated by weather/moon
       let score = 0;
       if (objs.length > 0) {
         const bestAlt = objs[0].altitude;
@@ -188,19 +177,16 @@ async function recalculate() {
         score = Math.min(100, 30 + count * 15 + Math.min(bestAlt, 60));
       }
 
-      // Weather penalty
       if (weatherData) {
         const hourlyScores = buildHourlyScores(weatherData, moonInfo, sunInfo, ctx.location.bortle);
         const window = findBestWindow(hourlyScores);
         if (window) {
           bestWindow = `${window.start}–${window.end}`;
           overallScore = window.score;
-          // If weather is bad in this direction's time, reduce score
           score = Math.round(score * (window.score / 100 + 0.3));
         }
       }
 
-      // Moon penalty for directions near moon
       if (moonInfo.altitude > 0 && moonInfo.illumination > 0.5) {
         const moonDir = Math.round(moonInfo.azimuth / 45) % 8;
         const dirIdx = DIRECTIONS.findIndex(dd => dd.key === d.key);
@@ -215,13 +201,11 @@ async function recalculate() {
       };
     });
 
-    renderCompass();
     renderNearbySites();
     renderTonightRecommendation();
     updateMapPins();
   } catch (err) {
     console.error('recalculate error:', err);
-    container.innerHTML = '<div class="loading"><span>' + t('general.calcFailed') + '</span></div>';
   }
 
   // Compute tonight summary (async, separate from compass)
@@ -267,105 +251,11 @@ function buildHourlyScores(weatherData: any[], moonInfo: any, sunInfo: any, bort
   });
 }
 
-// ===== Compass Rendering =====
-function renderCompass() {
-  const container = document.getElementById('compassContainer');
-  if (!container) return;
-
-  const dirsHtml = directionSkies.map(d => {
-    const scoreClass = d.score >= 70 ? 'great' : d.score >= 40 ? 'ok' : d.score >= 20 ? 'meh' : 'bad';
-    const objCount = d.objects.length;
-    const topObj = d.objects[0] ? (tCat(d.objects[0].id, 'name') || d.objects[0].name) : '';
-    return `
-      <div class="compass-dir ${activeDirection === d.name ? 'active' : ''}" data-dir="${d.name}">
-        <span class="dir-label">${d.label}</span>
-        <span class="dir-score score ${scoreClass}">${d.score}</span>
-        <span class="dir-objects">${objCount > 0 ? topObj + (objCount > 1 ? ` +${objCount - 1}` : '') : '—'}</span>
-      </div>`;
-  }).join('');
-
-  // Overall score ring
-  const overallClass = overallScore >= 70 ? 'great' : overallScore >= 40 ? 'ok' : 'meh';
-  const summaryHtml = `
-    <div style="text-align:center;margin:0 0 4px;">
-      <span class="score ${overallClass}" style="width:56px;height:56px;font-size:24px;border-radius:17px;">${overallScore}</span>
-    </div>
-    <div style="text-align:center;margin-bottom:4px;">
-      <span class="badge good">${moonPhaseName}</span>
-      ${bestWindow ? `<span class="badge">${bestWindow}</span>` : ''}
-    </div>`;
-
-  container.innerHTML = `
-    ${summaryHtml}
-    <div class="compass">
-      <div class="compass-ring"></div>
-      <div class="compass-center"></div>
-      ${dirsHtml}
-    </div>`;
-
-  // Click handlers for direction
-  container.querySelectorAll('.compass-dir').forEach(el => {
-    el.addEventListener('click', () => {
-      const dir = (el as HTMLElement).dataset.dir!;
-      activeDirection = activeDirection === dir ? null : dir;
-      renderCompass();
-      renderDirectionDetail();
-    });
-  });
-}
-
-// ===== Direction Detail =====
-function renderDirectionDetail() {
-  const container = document.getElementById('directionDetail');
-  if (!container) return;
-
-  if (!activeDirection) {
-    container.innerHTML = '';
-    return;
-  }
-
-  const sky = directionSkies.find(d => d.name === activeDirection);
-  if (!sky) return;
-
-  const objCards = sky.objects.map(o => {
-    const typeBadge = typeToBadge(o.type);
-    const objName = tCat(o.id, 'name') || o.name;
-    return `
-      <div class="card clickable" data-object="${o.id}">
-        <div class="row">
-          <div>
-            <div class="place">${objName}</div>
-            <div class="meta">${ctx.language === 'zh' ? '高度' : 'Alt'} ${o.altitude.toFixed(0)}° · ${ctx.language === 'zh' ? '最佳' : 'Best'} ${o.bestTime}</div>
-          </div>
-          <span class="badge ${typeBadge.cls}">${typeBadge.label}</span>
-        </div>
-      </div>`;
-  }).join('');
-
-  container.innerHTML = `
-    <div class="section">
-      <h3>${sky.label} ${ctx.language === 'zh' ? '方向' : 'direction'}</h3>
-      <span class="page-sub">${sky.objects.length} ${t('sites.directionObj')}</span>
-    </div>
-    ${sky.objects.length > 0 ? objCards : '<div class="card"><div class="meta" style="text-align:center;padding:20px 0">' + t('sites.noObjects') + '</div></div>'}
-  `;
-
-  // Object card click → navigate to object detail
-  container.querySelectorAll('[data-object]').forEach(el => {
-    el.addEventListener('click', () => {
-      const id = (el as HTMLElement).dataset.object;
-      if (id) (window as any).navigateTo?.('object-detail', id);
-    });
-  });
-}
-
-// ===== Nearby Dark Sites =====
+// ===== Nearby Dark Sites (numbered to match map pins) =====
 function renderNearbySites() {
   const container = document.getElementById('nearbySites');
   if (!container) return;
 
-  // Use dark sky places as nearby sites
-  // Filter by distance (simple lat/lon distance)
   const loc = ctx.location;
   const sites = DARK_SKY_PLACES
     .map(p => ({
@@ -380,26 +270,32 @@ function renderNearbySites() {
     return;
   }
 
-  container.innerHTML = sites.map(s => {
+  container.innerHTML = sites.map((s, i) => {
     const statusClass = s.yearCert ? 'official' : 'good';
     const statusLabel = s.yearCert ? t('status.official') : t('status.suggested');
+    const scoreVal = Math.max(10, 100 - s.bortle * 10);
+    const pinColor = scoreVal >= 70 ? '#7fdda9' : scoreVal >= 40 ? '#8bb5ff' : '#f0c96e';
     return `
       <div class="card clickable" data-site-name="${s.name}">
-        <div class="row">
-          <div>
-            <div class="place">${s.name}</div>
-            <div class="meta">${s.distKm} km · Bortle ~${s.bortle}</div>
+        <div class="site-card">
+          <div class="site-pin-num" style="background:${pinColor}">${i + 1}</div>
+          <div class="site-card-body">
+            <div class="row">
+              <div style="flex:1;min-width:0">
+                <div class="place">${s.name}</div>
+                <div class="meta">${s.distKm} km · Bortle ~${s.bortle}</div>
+              </div>
+              <div class="score ${scoreClass(s.bortle)}">${scoreVal}</div>
+            </div>
+            <div class="badges">
+              <span class="badge ${statusClass}">${statusLabel}</span>
+              <span class="badge">${s.type}</span>
+            </div>
           </div>
-          <div class="score ${scoreClass(s.bortle)}">${Math.max(10, 100 - s.bortle * 10)}</div>
-        </div>
-        <div class="badges">
-          <span class="badge ${statusClass}">${statusLabel}</span>
-          <span class="badge">${s.type}</span>
         </div>
       </div>`;
   }).join('');
 
-  // Click handler for site cards → navigate to place detail
   container.querySelectorAll('[data-site-name]').forEach(el => {
     el.addEventListener('click', () => {
       const name = (el as HTMLElement).dataset.siteName!;
@@ -427,17 +323,21 @@ function typeToBadge(type: string): { cls: string; label: string } {
   return map[type] || { cls: '', label: type };
 }
 
-function highlightDirectionForObject(q: string) {
-  // Find which direction the searched object is in
-  for (const sky of directionSkies) {
-    if (sky.objects.some(o => o.name.toLowerCase().includes(q))) {
-      activeDirection = sky.name;
-      renderCompass();
-      renderDirectionDetail();
-      return;
+function highlightSite(q: string) {
+  // Highlight matching site in nearby list
+  const cards = document.querySelectorAll('#nearbySites .card');
+  let found = false;
+  cards.forEach(card => {
+    const name = (card as HTMLElement).dataset.siteName || '';
+    if (name.toLowerCase().includes(q)) {
+      (card as HTMLElement).style.borderColor = 'var(--blue)';
+      if (!found) (card as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' });
+      found = true;
+    } else {
+      (card as HTMLElement).style.borderColor = '';
     }
-  }
-  (window as any).toast?.(ctx.language === 'zh' ? '未找到天体' : 'Object not found in current view');
+  });
+  if (!found) (window as any).toast?.(ctx.language === 'zh' ? '未找到地点' : 'Site not found');
 }
 
 function updateDateBar() {
