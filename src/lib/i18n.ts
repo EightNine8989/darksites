@@ -170,6 +170,19 @@ const translations: Record<string, Record<Lang, string>> = {
   // === Date / Tonight ===
   'date.tonight': { zh: '今晚', en: 'Tonight' },
 
+  // === Tonight Picks ===
+  'tonight.picks':       { zh: '今晚推荐', en: 'Tonight picks' },
+  'tonight.score':       { zh: '今晚观测评分', en: 'Tonight score' },
+
+  // === Contribution ===
+  'contrib.modalTitle':  { zh: '贡献地点报告', en: 'Contribute site report' },
+  'contrib.submit':     { zh: '提交报告', en: 'Submit report' },
+  'contrib.submitted':  { zh: '报告已提交！等待确认中', en: 'Report submitted! Pending confirmation.' },
+  'contrib.siteNotFound': { zh: '地点未找到', en: 'Site not found' },
+  'contrib.noField':    { zh: '请至少填写一项实地信息', en: 'Please fill at least one field report' },
+  'contrib.noVisitType': { zh: '请选择访问类型', en: 'Please select visit type' },
+  'contrib.noSkyCond':  { zh: '请给天况评分', en: 'Please rate the sky condition' },
+
   // === Status badges ===
   'status.official':  { zh: '官方认证', en: 'Official certified' },
   'status.suggested': { zh: '社区推荐', en: 'Community suggested' },

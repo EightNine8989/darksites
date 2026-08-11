@@ -143,7 +143,7 @@ export function renderPlaceDetailPage(siteId: string): string {
       </div>
       <div class="fact">
         <div class="label">${t('placeDetail.contribute')}</div>
-        <div class="value" style="color:var(--blue)">${ctx.language === 'zh' ? '报告状况' : 'Report conditions'}</div>
+        <div class="value" style="color:var(--blue);cursor:pointer" id="placeContributeBtn">${ctx.language === 'zh' ? '报告状况' : 'Report conditions'}</div>
       </div>
     </div>
   `;
@@ -164,6 +164,12 @@ export function initPlaceDetailPage(): void {
 
   document.getElementById('placeDetailSave')?.addEventListener('click', () => {
     (window as any).toast?.(t('general.saved'));
+  });
+
+  // Contribute button → open contribution modal
+  document.getElementById('placeContributeBtn')?.addEventListener('click', () => {
+    const siteName = document.querySelector('.hero-card h1')?.textContent;
+    if (siteName) (window as any).openContributionModal?.(siteName);
   });
 
   // Object card click → navigate to object detail

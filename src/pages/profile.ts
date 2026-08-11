@@ -3,6 +3,7 @@
 import type { EquipmentItem, ObservationRecord } from '../types';
 import { ctx, persistContext, onContextChange } from '../lib/context';
 import { t, tCat } from '../lib/i18n';
+import { loadContributions, getContributionStats, type ContributionRecord } from '../lib/contribution';
 
 // ===== State =====
 let profileTab: 'equipment' | 'records' | 'contributions' = 'equipment';
@@ -44,21 +45,6 @@ const SAMPLE_RECORDS: ObservationRecord[] = [
   },
 ];
 
-// ===== Contribution data =====
-interface ContributionRecord {
-  siteName: string;
-  date: string;
-  type: string;
-  status: 'accepted' | 'pending' | 'verified';
-  confirmCount?: number;
-}
-
-const SAMPLE_CONTRIBUTIONS: ContributionRecord[] = [
-  { siteName: '西涌暗夜社区', date: 'Aug 5', type: 'Verified visit', status: 'accepted' },
-  { siteName: '太行洪谷', date: 'Jul 28', type: 'Parking update', status: 'pending', confirmCount: 2 },
-  { siteName: '怀柔暗夜观测站', date: 'Jul 12', type: 'Local light report', status: 'verified' },
-];
-
 // ===== Persistence for records =====
 const RECORDS_KEY = 'ds_observation_records';
 
@@ -79,10 +65,13 @@ function saveRecords(records: ObservationRecord[]) {
 // ===== Render =====
 export function renderProfilePage(): string {
   const records = loadRecords();
-  const acceptedCount = SAMPLE_CONTRIBUTIONS.filter(c => c.status === 'accepted' || c.status === 'verified').length;
-  const verifiedCount = SAMPLE_CONTRIBUTIONS.filter(c => c.status === 'verified').length;
-  const contributionLevel = acceptedCount >= 5 ? (ctx.language === 'zh' ? '创始探索者' : 'Founding Explorer') : acceptedCount >= 3 ? (ctx.language === 'zh' ? '探索者' : 'Explorer') : (ctx.language === 'zh' ? '观测者' : 'Observer');
-  const lifetimeEligible = acceptedCount >= 3;
+  const contribStats = getContributionStats(loadContributions());
+  const contributionLevel = contribStats.level === 'founder'
+    ? (ctx.language === 'zh' ? '创始探索者' : 'Founding Explorer')
+    : contribStats.level === 'explorer'
+      ? (ctx.language === 'zh' ? '探索者' : 'Explorer')
+      : (ctx.language === 'zh' ? '观测者' : 'Observer');
+  const lifetimeEligible = contribStats.lifetimeEligible;
 
   return `
     <div class="page-top">
@@ -170,6 +159,7 @@ function renderProfileContent() {
       break;
     case 'contributions':
       container.innerHTML = renderContributionsSection();
+      initContributionsSection();
       break;
   }
 }
@@ -360,19 +350,28 @@ function initRecordsSection() {
 
 // ===== Contributions Section =====
 function renderContributionsSection(): string {
-  const acceptedCount = SAMPLE_CONTRIBUTIONS.filter(c => c.status === 'accepted' || c.status === 'verified').length;
-  const verifiedCount = SAMPLE_CONTRIBUTIONS.filter(c => c.status === 'verified').length;
-  const level = acceptedCount >= 5
-    ? (ctx.language === 'zh' ? '创始探索者' : 'Founding Explorer')
-    : acceptedCount >= 3
-      ? (ctx.language === 'zh' ? '探索者' : 'Explorer')
-      : (ctx.language === 'zh' ? '观测者' : 'Observer');
-  const lifetimeEligible = acceptedCount >= 3;
+  const contribs = loadContributions();
+  const stats = getContributionStats(contribs);
+  const isZh = (ctx.language || 'zh') === 'zh';
+
+  const level = stats.level === 'founder'
+    ? (isZh ? '创始探索者' : 'Founding Explorer')
+    : stats.level === 'explorer'
+      ? (isZh ? '探索者' : 'Explorer')
+      : (isZh ? '观测者' : 'Observer');
 
   const statusBadge = (c: ContributionRecord) => {
     if (c.status === 'verified') return `<span class="badge good">${t('status.verified')}</span>`;
     if (c.status === 'accepted') return `<span class="badge good">${t('status.accepted')}</span>`;
-    return `<span class="badge warn">${c.confirmCount || 0} / 3</span>`;
+    return `<span class="badge warn">${c.independentConfirmations} / 3</span>`;
+  };
+
+  // Format date
+  const fmtDate = (iso: string) => {
+    const d = new Date(iso);
+    return isZh
+      ? `${d.getMonth() + 1}月${d.getDate()}日`
+      : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
   return `
@@ -381,24 +380,24 @@ function renderContributionsSection(): string {
       <div class="row">
         <div>
           <div class="place">${level}</div>
-          <div class="meta">${acceptedCount} ${ctx.language === 'zh' ? '条已采纳贡献' : 'accepted contributions'} · ${verifiedCount} ${ctx.language === 'zh' ? '次已验证访问' : 'verified visits'}</div>
+          <div class="meta">${stats.accepted} ${isZh ? '条已采纳贡献' : 'accepted contributions'} · ${stats.verified} ${isZh ? '次已验证访问' : 'verified visits'}</div>
         </div>
-        ${lifetimeEligible ? `<span class="badge official">${t('profile.lifetime')}</span>` : `<span class="badge">${t('profile.forLifetime')}</span>`}
+        ${stats.lifetimeEligible ? `<span class="badge official">${t('profile.lifetime')}</span>` : `<span class="badge">${t('profile.forLifetime')}</span>`}
       </div>
     </div>
 
     <div class="section"><h3>${t('profile.recentContrib')}</h3><span class="page-sub">${t('profile.community')}</span></div>
-    ${SAMPLE_CONTRIBUTIONS.map(c => `
+    ${contribs.length > 0 ? contribs.map(c => `
       <div class="card">
         <div class="row">
           <div>
             <div class="place">${c.siteName}</div>
-            <div class="meta">${c.date} · ${c.type}</div>
+            <div class="meta">${fmtDate(c.submitDate)} · ${c.visitType === 'onsite' ? (isZh ? '现场访问' : 'On-site') : (isZh ? '历史访问' : 'Past visit')}</div>
           </div>
           ${statusBadge(c)}
         </div>
       </div>
-    `).join('')}
+    `).join('') : `<div class="card"><div class="meta" style="text-align:center;padding:20px 0">${isZh ? '暂无贡献记录' : 'No contributions yet'}</div></div>`}
 
     <div class="section"><h3>${t('profile.howItWorks')}</h3></div>
     <div class="card">
@@ -417,6 +416,16 @@ function renderContributionsSection(): string {
       <button class="primary-btn" id="startContribute">${t('profile.contributeBtn')}</button>
     </div>
   `;
+}
+
+// ===== Contributions Section Init =====
+function initContributionsSection() {
+  document.getElementById('startContribute')?.addEventListener('click', () => {
+    // Navigate to Sites page and let user pick a place
+    // For MVP: open contribution modal with nearest site
+    const nearestSite = ctx.location.name || 'Unknown';
+    (window as any).openContributionModal?.(nearestSite);
+  });
 }
 
 // ===== Helpers =====

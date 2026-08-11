@@ -8,6 +8,8 @@ import { renderObjectsPage, initObjectsPage } from './pages/objects';
 import { renderObjectDetailPage, initObjectDetailPage } from './pages/object-detail';
 import { renderPlaceDetailPage, initPlaceDetailPage } from './pages/place-detail';
 import { renderProfilePage, initProfilePage } from './pages/profile';
+import { CONTRIBUTION_FIELDS, submitContribution, validateContribution, loadContributions } from './lib/contribution';
+import { DARK_SKY_PLACES } from './lib/dark-sky-places';
 
 // ===== Navigation Stack =====
 type PageRoute = { type: 'tab'; tab: TabId } | { type: 'object-detail'; id: string } | { type: 'place-detail'; id: string };
@@ -289,6 +291,109 @@ function initEquipmentModal() {
   });
 }
 
+// ===== Contribution Modal =====
+let contributeSiteName = '';
+
+function createContributionModal(): string {
+  const isZh = (ctx.language || 'zh') === 'zh';
+  const fieldHtml = CONTRIBUTION_FIELDS.map(f => {
+    if (f.type === 'select' && f.options) {
+      const opts = f.options.map(o => `<option value="${o.value}">${isZh ? o.labelZh : o.labelEn}</option>`).join('');
+      return `<div class="field"><label>${isZh ? f.labelZh : f.labelEn}</label><select id="contrib_${f.key}" data-field="${f.key}">${opts}</select></div>`;
+    }
+    if (f.type === 'rating') {
+      return `<div class="field"><label>${isZh ? f.labelZh : f.labelEn}</label>
+        <div class="segment" id="contrib_${f.key}_seg">
+          <button class="seg" data-val="1">1</button><button class="seg" data-val="2">2</button>
+          <button class="seg active" data-val="3">3</button><button class="seg" data-val="4">4</button>
+          <button class="seg" data-val="5">5</button>
+        </div></div>`;
+    }
+    // text
+    return `<div class="field"><label>${isZh ? f.labelZh : f.labelEn}</label><textarea id="contrib_${f.key}" data-field="${f.key}" rows="2" placeholder="${isZh ? '可选...' : 'Optional...'}"></textarea></div>`;
+  }).join('');
+
+  return `
+  <div id="contributionModal" class="modal">
+    <div class="sheet">
+      <div class="handle"></div>
+      <div class="row">
+        <div><div class="page-sub">${isZh ? '暗夜地点' : 'Dark Site'}</div><h2>${isZh ? '贡献地点报告' : 'Contribute site report'}</h2></div>
+        <button class="back-btn" onclick="document.getElementById('contributionModal').classList.remove('show')">✕</button>
+      </div>
+      <div id="contribSiteName" style="margin-bottom:12px;font-weight:800;font-size:15px;color:var(--blue)"></div>
+      ${fieldHtml}
+      <button class="primary-btn" id="submitContribution">${isZh ? '提交报告' : 'Submit report'}</button>
+    </div>
+  </div>`;
+}
+
+function initContributionModal() {
+  // Rating segments
+  CONTRIBUTION_FIELDS.filter(f => f.type === 'rating').forEach(f => {
+    const segId = `contrib_${f.key}_seg`;
+    document.getElementById(segId)?.addEventListener('click', (e) => {
+      const seg = (e.target as HTMLElement).closest('.seg') as HTMLElement;
+      if (!seg) return;
+      document.querySelectorAll(`#${segId} .seg`).forEach(s => s.classList.remove('active'));
+      seg.classList.add('active');
+    });
+  });
+
+  // Submit
+  document.getElementById('submitContribution')?.addEventListener('click', () => {
+    const isZh = (ctx.language || 'zh') === 'zh';
+    const fields: { key: string; value: string }[] = [];
+
+    CONTRIBUTION_FIELDS.forEach(f => {
+      if (f.type === 'rating') {
+        const active = document.querySelector(`#contrib_${f.key}_seg .seg.active`) as HTMLElement;
+        if (active) fields.push({ key: f.key, value: active.dataset.val || '3' });
+      } else {
+        const el = document.getElementById(`contrib_${f.key}`) as HTMLSelectElement | HTMLTextAreaElement;
+        if (el?.value) fields.push({ key: f.key, value: el.value });
+      }
+    });
+
+    // Validate
+    const validation = validateContribution(fields as any, ctx.language || 'zh');
+    if (!validation.valid) {
+      toast(validation.errors[0]);
+      return;
+    }
+
+    // Find site data
+    const site = DARK_SKY_PLACES.find(p => p.name === contributeSiteName);
+    if (!site) {
+      toast(isZh ? '地点未找到' : 'Site not found');
+      return;
+    }
+
+    // Submit
+    const visitType = (fields.find(f => f.key === 'visitType')?.value || 'onsite') as 'onsite' | 'past_visit';
+    submitContribution(
+      site.name, site.lat, site.lon,
+      fields as any, visitType
+    );
+
+    closeModal('contributionModal');
+    toast(isZh ? '报告已提交！等待确认中' : 'Report submitted! Pending confirmation.');
+  });
+
+  // Close on backdrop click
+  document.getElementById('contributionModal')?.addEventListener('click', (e) => {
+    if (e.target === document.getElementById('contributionModal')) closeModal('contributionModal');
+  });
+}
+
+// Expose contribute function for pages to call
+(window as any).openContributionModal = (siteName: string) => {
+  contributeSiteName = siteName;
+  const nameEl = document.getElementById('contribSiteName');
+  if (nameEl) nameEl.textContent = siteName;
+  openModal('contributionModal');
+};
+
 function toggle(id: string, show: boolean) {
   const el = document.getElementById(id);
   if (el) el.style.display = show ? 'block' : 'none';
@@ -322,9 +427,11 @@ async function init() {
   if (app) {
     app.insertAdjacentHTML('beforeend', createDateModal());
     app.insertAdjacentHTML('beforeend', createEquipmentModal());
+    app.insertAdjacentHTML('beforeend', createContributionModal());
   }
   initDateModal();
   initEquipmentModal();
+  initContributionModal();
 
   // Tab bar
   document.querySelectorAll('.tab').forEach(t => {

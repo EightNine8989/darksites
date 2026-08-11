@@ -7,6 +7,7 @@ import { computePosition, computeMoonPhase, computeSunInfo, groupByDirection } f
 import { fetchHourlyWeather, computeHourlyScore, findBestWindow } from '../lib/weather';
 import { DARK_SKY_PLACES } from '../lib/dark-sky-places';
 import { t, tCat } from '../lib/i18n';
+import { computeTonightSummary, type TonightSummary } from '../lib/recommendation';
 
 // ===== 8 方位定义 =====
 const DIRECTIONS = [
@@ -27,6 +28,7 @@ let weatherData: any = null;
 let overallScore = 0;
 let moonPhaseName = '';
 let bestWindow = '';
+let tonightSummary: TonightSummary | null = null;
 
 // ===== Render =====
 export function renderSitesPage(): string {
@@ -68,6 +70,9 @@ export function renderSitesPage(): string {
         <button class="chip ${ctx.activeTarget === 'planets' ? 'active' : ''}" data-target="planets">${t('filter.planets')}</button>
       </div>
     </div>
+
+    <!-- Tonight Recommendation -->
+    <div id="tonightRec"></div>
 
     <!-- Compass -->
     <div id="compassContainer"></div>
@@ -202,9 +207,30 @@ async function recalculate() {
 
     renderCompass();
     renderNearbySites();
+    renderTonightRecommendation();
   } catch (err) {
     console.error('recalculate error:', err);
     container.innerHTML = '<div class="loading"><span>' + t('general.calcFailed') + '</span></div>';
+  }
+
+  // Compute tonight summary (async, separate from compass)
+  try {
+    const [hh2, mm2] = ctx.startTime.split(':').map(Number);
+    const obsDate2 = new Date(ctx.date);
+    obsDate2.setHours(hh2 || 22, mm2 || 0, 0, 0);
+    tonightSummary = await computeTonightSummary(
+      celestialCatalog,
+      { lat: ctx.location.lat, lon: ctx.location.lon },
+      obsDate2,
+      ctx.equipment,
+      ctx.location.bortle,
+      ctx.language || 'zh'
+    );
+    overallScore = tonightSummary.overallScore;
+    bestWindow = tonightSummary.bestWindow;
+    renderTonightRecommendation();
+  } catch (err) {
+    console.error('tonight summary error:', err);
   }
 }
 
@@ -408,4 +434,70 @@ function updateDateBar() {
   const equipBtn = document.getElementById('sitesEquipBtn');
   if (dateBtn) dateBtn.querySelector('strong')!.textContent = `${formatDateShort()} · ${ctx.startTime}`;
   if (equipBtn) equipBtn.querySelector('strong')!.textContent = equipmentSummary();
+}
+
+// ===== Tonight Recommendation Card =====
+function renderTonightRecommendation() {
+  const container = document.getElementById('tonightRec');
+  if (!container) return;
+
+  if (!tonightSummary) {
+    container.innerHTML = '';
+    return;
+  }
+
+  const s = tonightSummary;
+  const isZh = (ctx.language || 'zh') === 'zh';
+  const scoreClass = s.overallScore >= 70 ? 'great' : s.overallScore >= 40 ? 'ok' : s.overallScore >= 20 ? 'meh' : 'bad';
+
+  const topPicksHtml = s.topPicks.map(pick => {
+    const obj = celestialCatalog.find(o => o.id === pick.objectId);
+    const objName = tCat(pick.objectId, 'name') || obj?.name || pick.objectId;
+    const typeBadge = typeToBadge(obj?.type || '');
+    const pickScoreClass = pick.totalScore >= 70 ? 'great' : pick.totalScore >= 40 ? 'ok' : pick.totalScore >= 20 ? 'meh' : 'bad';
+    return `
+      <div class="card clickable" data-object="${pick.objectId}" style="margin-bottom:8px">
+        <div class="row">
+          <div style="flex:1;min-width:0">
+            <div class="place">${objName}</div>
+            <div class="meta">${pick.direction} · ${isZh ? '高度' : 'Alt'} ${pick.altitude.toFixed(0)}° · ${isZh ? '最佳' : 'Best'} ${pick.bestTime}</div>
+          </div>
+          <div style="text-align:right;flex:0 0 auto">
+            <div class="score ${pickScoreClass}" style="width:36px;height:36px;font-size:15px;border-radius:11px">${pick.totalScore}</div>
+          </div>
+        </div>
+        <div class="badges">
+          <span class="badge ${typeBadge.cls}">${typeBadge.label}</span>
+          ${pick.reasons.length > 0 ? `<span class="badge good">${pick.reasons[0]}</span>` : ''}
+          ${pick.warnings.length > 0 ? `<span class="badge warn">${pick.warnings[0]}</span>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+
+  container.innerHTML = `
+    <div class="section">
+      <h3>${isZh ? '今晚推荐' : 'Tonight picks'}</h3>
+      <span class="page-sub">${s.moonPhase}${s.bestWindow ? ' · ' + s.bestWindow : ''}</span>
+    </div>
+    <div class="hero-card" style="margin-bottom:12px">
+      <div style="display:flex;align-items:end;gap:8px;margin-bottom:8px">
+        <div class="score ${scoreClass}" style="width:56px;height:56px;font-size:24px;border-radius:17px">${s.overallScore}</div>
+        <div>
+          <div style="font-weight:800;font-size:16px">${isZh ? '今晚观测评分' : 'Tonight score'}</div>
+          <div class="meta">${s.moonImpact}</div>
+        </div>
+      </div>
+      ${s.cloudCover > 0 ? `<div class="meta">${isZh ? '云量' : 'Clouds'} ${s.cloudCover}%${s.bestWindow ? ' · ' + (isZh ? '最佳时段 ' : 'Best window ') + s.bestWindow : ''}</div>` : ''}
+      ${s.astroDusk !== '—' ? `<div class="meta">${isZh ? '天文昏影终' : 'Astro dusk'} ${s.astroDusk} · ${isZh ? '日出' : 'Dawn'} ${s.astroDawn}</div>` : ''}
+    </div>
+    ${topPicksHtml}
+  `;
+
+  // Click handlers for recommended objects
+  container.querySelectorAll('[data-object]').forEach(el => {
+    el.addEventListener('click', () => {
+      const id = (el as HTMLElement).dataset.object;
+      if (id) (window as any).navigateTo?.('object-detail', id);
+    });
+  });
 }
