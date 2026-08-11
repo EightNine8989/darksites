@@ -78,15 +78,15 @@ export function renderSitesPage(): string {
     <!-- Map -->
     <div id="sitesMap" class="sites-map"></div>
 
-    <!-- Tonight Recommendation -->
-    <div id="tonightRec"></div>
-
     <!-- Nearby dark sites (numbered to match map pins) -->
     <div class="section">
       <h3>${t('sites.nearby')}</h3>
       <span class="page-sub">${t('sites.forDate')} ${dateLabel}</span>
     </div>
     <div id="nearbySites"></div>
+
+    <!-- Tonight Recommendation -->
+    <div id="tonightRec"></div>
   `;
 }
 
