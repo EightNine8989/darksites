@@ -102,9 +102,9 @@ export function initSitesPage(): void {
     (window as any).openModal?.('equipmentModal');
   });
 
-  // Contribute button
+  // Contribute button → switch to Profile tab's contributions section
   document.getElementById('sitesContribute')?.addEventListener('click', () => {
-    (window as any).toast?.('Contribution flow coming soon');
+    (window as any).switchToProfile?.();
   });
 
   // Search

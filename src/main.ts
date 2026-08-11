@@ -6,6 +6,7 @@ import { renderSitesPage, initSitesPage } from './pages/sites';
 import { renderObjectsPage, initObjectsPage } from './pages/objects';
 import { renderObjectDetailPage, initObjectDetailPage } from './pages/object-detail';
 import { renderPlaceDetailPage, initPlaceDetailPage } from './pages/place-detail';
+import { renderProfilePage, initProfilePage } from './pages/profile';
 
 // ===== Navigation Stack =====
 type PageRoute = { type: 'tab'; tab: TabId } | { type: 'object-detail'; id: string } | { type: 'place-detail'; id: string };
@@ -87,7 +88,8 @@ function renderRoute(route: PageRoute) {
           tabInited.objects = true;
           break;
         case 'profile':
-          container.innerHTML = renderProfilePlaceholder();
+          container.innerHTML = renderProfilePage();
+          initProfilePage();
           break;
       }
       break;
@@ -104,18 +106,7 @@ function renderRoute(route: PageRoute) {
   }
 }
 
-// Placeholder pages (profile only)
-function renderProfilePlaceholder(): string {
-  return `
-    <div class="page-top">
-      <div><div class="page-sub">Your observing profile</div><h1>Profile</h1></div>
-      <button class="icon-btn">⚙︎</button>
-    </div>
-    <div class="hero-card">
-      <h2>Coming soon</h2>
-      <p>Equipment management, visit records and contributor program.</p>
-    </div>`;
-}
+// Profile placeholder removed — now uses renderProfilePage from pages/profile.ts
 
 // ===== Modal System =====
 function openModal(id: string) {
@@ -142,6 +133,7 @@ function toast(msg: string) {
 // Expose globally
 (window as any).openModal = openModal;
 (window as any).toast = toast;
+(window as any).switchToProfile = () => switchTab('profile');
 
 // ===== Date Modal =====
 function createDateModal(): string {
