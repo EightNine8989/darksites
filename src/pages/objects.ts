@@ -295,7 +295,7 @@ function renderObjectCard(obj: CelestialObject, pos: CelestialPosition | null): 
     <div class="card object-card clickable" data-id="${obj.id}">
       <div class="row">
         <div style="flex:1;min-width:0">
-          <div class="place">${obj.name}</div>
+          <div class="place">${obj.name}${obj.constellation && obj.constellation !== '—' ? `<span class="const-sub">${ctx.language === 'zh' ? `（${obj.constellation}）` : ` (${obj.constellation})`}</span>` : ''}</div>
           <div class="meta">
             ${obj.constellation !== '—' ? obj.constellation : ''} · Mag ${obj.magnitude > 0 ? '+' : ''}${obj.magnitude.toFixed(1)}
             ${visible ? ` · <span style="color:var(--good)">${altText} ${dirText}</span>` : ` · <span style="color:var(--dim)">${t('objects.belowHorizon')}</span>`}

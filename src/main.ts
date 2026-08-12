@@ -7,6 +7,7 @@ import { renderSitesPage, initSitesPage } from './pages/sites';
 import { renderObjectsPage, initObjectsPage } from './pages/objects';
 import { renderObjectDetailPage, initObjectDetailPage } from './pages/object-detail';
 import { renderPlaceDetailPage, initPlaceDetailPage } from './pages/place-detail';
+import { renderObservePage, initObservePage } from './pages/observe';
 import { renderProfilePage, initProfilePage } from './pages/profile';
 import { CONTRIBUTION_FIELDS, submitContribution, validateContribution, loadContributions } from './lib/contribution';
 import { DARK_SKY_PLACES } from './lib/dark-sky-places';
@@ -41,11 +42,12 @@ function navigateBack() {
 // Expose globally for detail pages
 (window as any).navigateTo = navigateTo;
 (window as any).navigateBack = navigateBack;
+(window as any).getCurrentRoute = () => navStack[navStack.length - 1];
 
 // ===== Tab Routing =====
-type TabId = 'sites' | 'objects' | 'profile';
+type TabId = 'sites' | 'objects' | 'observe' | 'profile';
 let currentTab: TabId = 'sites';
-let tabInited: Record<TabId, boolean> = { sites: false, objects: false, profile: false };
+let tabInited: Record<TabId, boolean> = { sites: false, objects: false, observe: false, profile: false };
 
 function switchTab(tab: TabId) {
   currentTab = tab;
@@ -65,6 +67,7 @@ function updateTabBarLabels() {
     const labelMap: Record<TabId, string> = {
       sites: t('tab.sites'),
       objects: t('tab.objects'),
+      observe: t('tab.observe'),
       profile: t('tab.profile'),
     };
     // Update only the text node (after the <i> icon)
@@ -110,6 +113,11 @@ function renderRoute(route: PageRoute) {
           container.innerHTML = renderObjectsPage();
           initObjectsPage();
           tabInited.objects = true;
+          break;
+        case 'observe':
+          container.innerHTML = renderObservePage();
+          initObservePage();
+          tabInited.observe = true;
           break;
         case 'profile':
           container.innerHTML = renderProfilePage();

@@ -82,6 +82,9 @@ button { cursor: pointer; border: none; background: none; }
 .card .place { font-size: 16px; font-weight: 800; }
 .card .meta { font-size: 12px; color: var(--muted); line-height: 1.45; }
 
+/* Constellation subtitle next to object name */
+.const-sub { font-size: 12px; font-weight: 600; color: var(--muted); margin-left: 5px; }
+
 /* ===== Row ===== */
 .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 
@@ -174,3 +177,42 @@ button { cursor: pointer; border: none; background: none; }
   body { padding: 16px; background: #02040a; display: flex; justify-content: center; align-items: flex-start; }
   #app { min-height: auto; max-height: none; border: 1px solid #1f2d44; border-radius: 32px; box-shadow: 0 30px 80px rgba(0,0,0,.55); }
 }
+
+/* ===== Observe Page — Tip Cards ===== */
+.tip-card { display: flex; gap: 12px; align-items: flex-start; margin: 10px 0; }
+.tip-icon { width: 40px; height: 40px; border-radius: 12px; flex: 0 0 auto; display: grid; place-items: center; font-size: 18px; background: #13203a; border: 1px solid var(--line); }
+.tip-body { flex: 1; min-width: 0; }
+.tip-title { font-size: 14px; font-weight: 800; margin-bottom: 2px; }
+.tip-text { font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+/* ===== Observe Page — Diary Cards ===== */
+.diary-card { border: 1px solid var(--line); border-radius: 16px; background: rgba(14,22,37,.97); padding: 14px; margin: 8px 0; cursor: pointer; transition: border-color .15s; }
+.diary-card:hover { border-color: var(--blue); }
+.diary-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.diary-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--good); flex: 0 0 auto; }
+.diary-date { font-size: 12px; color: var(--muted); }
+.diary-place { font-size: 11px; color: var(--blue); margin-left: auto; }
+.diary-text { font-size: 13px; color: var(--text); line-height: 1.6; margin-bottom: 10px; }
+.diary-photos { display: flex; gap: 6px; flex-wrap: wrap; }
+.diary-photo { width: 64px; height: 64px; border-radius: 10px; object-fit: cover; border: 1px solid var(--line); background: #0d1828; }
+.diary-add { width: 64px; height: 64px; border-radius: 10px; border: 1px dashed var(--line); display: grid; place-items: center; color: var(--muted); font-size: 22px; cursor: pointer; background: transparent; }
+
+/* ===== Observe Page — Calendar ===== */
+.cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; margin-top: 8px; }
+.cal-head { text-align: center; font-size: 10px; color: #6b7c96; padding: 4px 0; font-weight: 700; }
+.cal-day { text-align: center; padding: 6px 0; font-size: 12px; border-radius: 10px; position: relative; cursor: pointer; color: var(--muted); }
+.cal-day.today { color: var(--text); font-weight: 800; background: #1a2941; }
+.cal-day.has-event::after { content: ''; position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%); width: 5px; height: 5px; border-radius: 50%; }
+.cal-day.e-meteor::after { background: var(--warn); }
+.cal-day.e-eclipse::after { background: var(--bad); }
+.cal-day.e-conjunction::after { background: var(--purple); }
+.cal-day.e-moon::after { background: var(--good); }
+.cal-day.checked { background: rgba(127,221,169,.12); color: var(--good); }
+.cal-day.empty { cursor: default; }
+.cal-legend { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
+.cal-legend span { font-size: 10px; color: var(--muted); display: flex; align-items: center; gap: 4px; }
+.cal-legend i { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+
+/* ===== FAB (Floating Action Button) ===== */
+.fab { position: sticky; bottom: 100px; display: flex; justify-content: flex-end; pointer-events: none; margin-top: -50px; z-index: 10; }
+.fab button { pointer-events: auto; width: 52px; height: 52px; border-radius: 50%; background: var(--good); color: #050811; border: 0; font-size: 26px; font-weight: 900; box-shadow: 0 4px 16px rgba(0,0,0,.4); display: grid; place-items: center; cursor: pointer; }

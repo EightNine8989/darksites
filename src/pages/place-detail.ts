@@ -24,9 +24,6 @@ export function renderPlaceDetailPage(siteId: string): string {
     .filter(({ pos }) => pos.visible && pos.altitude > 0)
     .sort((a, b) => b.pos.altitude - a.pos.altitude);
 
-  // Moon info
-  const moonInfo = computeMoonPhase(obsDate, loc);
-
   // Score
   const score = Math.max(10, 100 - site.bortle * 10);
   const scoreCls = score >= 70 ? 'great' : score >= 40 ? 'ok' : 'meh';
@@ -36,18 +33,8 @@ export function renderPlaceDetailPage(siteId: string): string {
   const statusCls = site.yearCert ? 'official' : 'good';
   const statusLabel = site.yearCert ? t('status.official') : t('status.suggested');
 
-  // Moon conflict
-  const moonImpact = moonInfo.altitude > 0 && moonInfo.illumination > 0.5
-    ? (ctx.language === 'zh' ? `月光至 ${moonInfo.setTime || '—'} (${moonInfo.phaseName})` : `Moon up until ${moonInfo.setTime || '—'} (${moonInfo.phaseName})`)
-    : t('placeDetail.noMoonInterf');
-
   // Distance from current location
   const distKm = Math.round(Math.sqrt((site.lat - ctx.location.lat) ** 2 + (site.lon - ctx.location.lon) ** 2) * 111);
-
-  // Equipment suitable at this site
-  const siteEquipSuitable = site.bortle <= 3
-    ? (ctx.language === 'zh' ? '肉眼、双筒镜、相机' : 'Naked eye, binoculars, camera')
-    : (ctx.language === 'zh' ? '推荐双筒镜、望远镜' : 'Binoculars, telescope recommended');
 
   return `
     <div class="page-top">
@@ -72,30 +59,26 @@ export function renderPlaceDetailPage(siteId: string): string {
         <strong>${formatDateShort()} · ${ctx.startTime}</strong>
         <span>${t('placeDetail.forecast')}</span>
       </button>
-      <button class="date-btn" id="placeDetailEquipBtn">
-        <strong>${t('placeDetail.equipSuit')}: ${siteEquipSuitable}</strong>
-        <span>${t('placeDetail.equipSuitLabel')}</span>
-      </button>
     </div>
 
     <!-- Tonight conditions -->
     <div class="section"><h3>${t('placeDetail.tonight')}</h3><span class="page-sub">${t('placeDetail.dateSensitive')}</span></div>
-    <div class="grid-2">
+    <div class="grid-2" id="placeWeatherGrid">
       <div class="fact">
-        <div class="label">${t('placeDetail.lightPoll')}</div>
-        <div class="value">Bortle ~${site.bortle}</div>
+        <div class="label">${t('placeDetail.temp')}</div>
+        <div class="value" id="placeTemp">—</div>
       </div>
       <div class="fact">
-        <div class="label">${t('placeDetail.moonImpact')}</div>
-        <div class="value" style="${moonInfo.altitude > 0 && moonInfo.illumination > 0.5 ? 'color:var(--warn)' : 'color:var(--good)'};font-size:12px">${moonImpact}</div>
+        <div class="label">${t('placeDetail.humidity')}</div>
+        <div class="value" id="placeHumidity">—</div>
       </div>
       <div class="fact">
-        <div class="label">${t('placeDetail.moonPhase')}</div>
-        <div class="value">${moonInfo.phaseName} (${Math.round(moonInfo.illumination * 100)}%)</div>
+        <div class="label">${t('placeDetail.wind')}</div>
+        <div class="value" id="placeWind">—</div>
       </div>
       <div class="fact">
-        <div class="label">${t('placeDetail.elevation')}</div>
-        <div class="value">${site.altitudeM ? `${site.altitudeM}m` : '—'}</div>
+        <div class="label">${t('placeDetail.visibility')}</div>
+        <div class="value" id="placeVisibility">—</div>
       </div>
     </div>
 
@@ -113,11 +96,14 @@ export function renderPlaceDetailPage(siteId: string): string {
     <div class="section"><h3>${t('placeDetail.bestObj')}</h3><span class="page-sub">${t('objDetail.forDate')}</span></div>
     ${positions.slice(0, 5).map(({ obj, pos }) => {
       const typeBadge = typeToInfo(obj.type);
+      const constLabel = obj.constellation && obj.constellation !== '—'
+        ? (ctx.language === 'zh' ? `（${obj.constellation}）` : ` (${obj.constellation})`)
+        : '';
       return `
         <div class="card clickable" data-object-id="${obj.id}">
           <div class="row">
             <div>
-              <div class="place">${tCat(obj.id, 'name') || obj.name}</div>
+              <div class="place">${tCat(obj.id, 'name') || obj.name}<span class="const-sub">${constLabel}</span></div>
               <div class="meta">${ctx.language === 'zh' ? '最佳' : 'Best'} ${pos.bestTime} · ${pos.directionText} · ${ctx.language === 'zh' ? '高度' : 'Alt'} ${pos.altitude.toFixed(0)}°</div>
             </div>
             <span class="badge ${typeBadge.cls}">${typeBadge.label}</span>
@@ -158,10 +144,6 @@ export function initPlaceDetailPage(): void {
     (window as any).openModal?.('dateModal');
   });
 
-  document.getElementById('placeDetailEquipBtn')?.addEventListener('click', () => {
-    (window as any).openModal?.('equipmentModal');
-  });
-
   document.getElementById('placeDetailSave')?.addEventListener('click', () => {
     (window as any).toast?.(t('general.saved'));
   });
@@ -180,7 +162,7 @@ export function initPlaceDetailPage(): void {
     });
   });
 
-  // Fetch weather for best window
+  // Fetch weather for best window + condition cards
   const siteName = document.querySelector('.hero-card h1')?.textContent;
   if (siteName) {
     const site = DARK_SKY_PLACES.find(p => p.name === siteName);
@@ -192,6 +174,34 @@ export function initPlaceDetailPage(): void {
         obsDate.setHours(hh || 22, mm || 0, 0, 0);
         const moonInfo = computeMoonPhase(obsDate, { lat: site.lat, lon: site.lon });
         const sunInfo = computeSunInfo(obsDate, { lat: site.lat, lon: site.lon });
+
+        // Fill weather condition cards — pick hour closest to observation start time
+        const targetHour = obsDate.getTime();
+        let bestIdx = 0;
+        let bestDiff = Infinity;
+        weatherData.forEach((h: any, i: number) => {
+          const diff = Math.abs(new Date(h.time).getTime() - targetHour);
+          if (diff < bestDiff) { bestDiff = diff; bestIdx = i; }
+        });
+        const hw = weatherData[bestIdx];
+        if (hw) {
+          const isZh = (ctx.language || 'zh') === 'zh';
+          const setVal = (id: string, v: string) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = v;
+          };
+          setVal('placeTemp', `${Math.round(hw.temperature)}°C`);
+          setVal('placeHumidity', `${Math.round(hw.humidity)}%`);
+          const windLabel = hw.windSpeed > 15 ? (isZh ? '大风' : 'Windy')
+            : hw.windSpeed > 10 ? (isZh ? '有风' : 'Breezy')
+            : (isZh ? '微风' : 'Calm');
+          setVal('placeWind', `${Math.round(hw.windSpeed)} km/h · ${windLabel}`);
+          const visLabel = hw.visibility < 5 ? (isZh ? '较差' : 'Poor')
+            : hw.visibility < 10 ? (isZh ? '一般' : 'Fair')
+            : (isZh ? '良好' : 'Good');
+          setVal('placeVisibility', `${hw.visibility} km · ${visLabel}`);
+        }
+
         const hourlyScores = weatherData.filter((_: any, i: number) => i % 2 === 0).map((h: any) => {
           const r = computeHourlyScore({
             cloudCover: h.cloudCover, moonAltitude: moonInfo.altitude,

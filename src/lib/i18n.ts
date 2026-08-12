@@ -9,21 +9,27 @@ const translations: Record<string, Record<Lang, string>> = {
   // === Tab Bar ===
   'tab.sites':     { zh: '地点', en: 'Sites' },
   'tab.objects':   { zh: '天体', en: 'Objects' },
+  'tab.observe':   { zh: '记录', en: 'Journal' },
   'tab.profile':   { zh: '我的', en: 'Profile' },
 
   // === Sites Page ===
-  'sites.sub':           { zh: '今晚往哪看', en: 'Where to look tonight' },
-  'sites.title':         { zh: '地点', en: 'Sites' },
-  'sites.heroTitle':     { zh: '往这个方向看', en: 'Look this way' },
-  'sites.heroDesc':      { zh: '每个方向显示今晚可见天体。评分随日期、月相、天气和设备变化。', en: 'Each direction shows what\'s visible tonight. Scores change with date, Moon, weather and your equipment.' },
-  'sites.search':        { zh: '搜索天体', en: 'Search object' },
-  'sites.nearby':        { zh: '附近暗夜地点', en: 'Nearby dark sites' },
+  'sites.sub':           { zh: '今晚往哪看', en: 'Plan a night out' },
+  'sites.title':         { zh: '地点', en: 'Dark Sites' },
+  'sites.heroTitle':     { zh: '往这个方向看', en: 'Best places for this date' },
+  'sites.heroDesc':      { zh: '每个方向显示今晚可见天体。评分随日期、月相、天气和设备变化。', en: 'Site ranking changes with date, time, Moon, target altitude, weather and your equipment.' },
+  'sites.search':        { zh: '搜索天体', en: 'Search place or region' },
+  'sites.nearby':        { zh: '附近暗夜地点', en: 'Best nearby' },
   'sites.forDate':        { zh: '观测日期', en: 'For' },
   'sites.changeDate':    { zh: '切换日期和时间', en: 'Change date & time' },
   'sites.yourEquip':     { zh: '你的设备', en: 'Your equipment' },
   'sites.directionObj':  { zh: '个天体可见', en: 'objects visible' },
   'sites.noObjects':     { zh: '此方向今晚无明亮天体', en: 'No bright objects in this direction tonight' },
   'sites.noSites':       { zh: '附近无已知暗夜地点', en: 'No known dark sites nearby' },
+
+  // === Favorites ===
+  'fav.sub':             { zh: '我的收藏', en: 'My favorites' },
+  'fav.title':           { zh: '星星收藏夹', en: 'Favorite objects' },
+  'fav.empty':           { zh: '还没有收藏天体。去天体页点 ♡ 收藏你的目标吧。', en: 'No favorites yet. Tap ♡ on any object to save it here.' },
 
   // === Chip Filters ===
   'filter.all':       { zh: '全部', en: 'All' },
@@ -93,6 +99,10 @@ const translations: Record<string, Record<Lang, string>> = {
   'placeDetail.equipSuit': { zh: '适合设备', en: 'Good for' },
   'placeDetail.equipSuitLabel': { zh: '设备适配', en: 'Equipment suitability' },
   'placeDetail.noMoonInterf':{ zh: '今晚无月光干扰', en: 'No moon interference tonight' },
+  'placeDetail.temp':       { zh: '温度', en: 'Temperature' },
+  'placeDetail.humidity':   { zh: '湿度', en: 'Humidity' },
+  'placeDetail.wind':       { zh: '风速', en: 'Wind' },
+  'placeDetail.visibility': { zh: '能见度', en: 'Visibility' },
 
   // === Profile Page ===
   'profile.sub':           { zh: '你的观测档案', en: 'Your observing profile' },
@@ -195,6 +205,32 @@ const translations: Record<string, Record<Lang, string>> = {
   'vis.good':      { zh: '良好', en: 'Good' },
   'vis.fair':      { zh: '一般', en: 'Fair' },
   'vis.poor':      { zh: '较差', en: 'Poor' },
+
+  // === Observe Page ===
+  'observe.sub':            { zh: '你的观测记录', en: 'Your observation log' },
+  'observe.title':          { zh: '记录', en: 'Journal' },
+  'observe.tipsTitle':      { zh: '今晚贴士', en: 'Tips for tonight' },
+  'observe.tipsDesc':       { zh: '根据你的位置、目标和设备生成的个性化建议。', en: 'Personalized advice based on your location, target and equipment.' },
+  'observe.journal':        { zh: '观测日记', en: 'Observation journal' },
+  'observe.newEntry':       { zh: '＋ 新建', en: '+ New' },
+  'observe.noDiary':        { zh: '暂无日记，开始记录你的观测！', en: 'No journal entries yet. Start recording your observations!' },
+  'observe.calendar':       { zh: '天象日历', en: 'Celestial calendar' },
+  'observe.legend':         { zh: '图例', en: 'Legend' },
+  'observe.meteor':         { zh: '流星雨', en: 'Meteor shower' },
+  'observe.eclipse':        { zh: '日月食', en: 'Eclipse' },
+  'observe.conjunction':    { zh: '合', en: 'Conjunction' },
+  'observe.moonPhase':      { zh: '月相', en: 'Moon phase' },
+  'observe.observed':       { zh: '已观测', en: 'Observed' },
+  'observe.tip.clearWindow':  { zh: '晴空窗口', en: 'Clear window' },
+  'observe.tip.moonSet':      { zh: '月落时间', en: 'Moon sets' },
+  'observe.tip.equipTip':     { zh: '设备贴士', en: 'Equipment tip' },
+  'observe.tip.event':        { zh: '天象提醒', en: 'Celestial event' },
+  'observe.tip.dew':           { zh: '露水警告', en: 'Dew warning' },
+  'observe.tip.noData':        { zh: '获取天气数据后显示更多贴士', en: 'More tips available after weather data loads' },
+  'observe.diaryModalTitle':  { zh: '新建观测日记', en: 'New observation entry' },
+  'observe.diaryPlaceholder': { zh: '记录你的观测经历...', en: 'Record your observation experience...' },
+  'observe.saveEntry':        { zh: '保存', en: 'Save' },
+  'observe.entrySaved':       { zh: '日记已保存', en: 'Entry saved' },
 };
 
 // ===== t() — translate by key =====

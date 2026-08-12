@@ -182,6 +182,27 @@ export interface Contribution {
   independentConfirmations: number;
 }
 
+// ===== Observation Diary =====
+export interface DiaryEntry {
+  id: string;
+  date: string;        // ISO date string
+  time: string;        // "HH:MM"
+  locationName: string;
+  text: string;
+  photos: string[];    // base64 data URLs
+  createdAt: string;    // ISO timestamp
+}
+
+// ===== Calendar Events (astronomical) =====
+export type CalendarEventType = 'meteor' | 'eclipse' | 'conjunction' | 'moon';
+
+export interface CalendarEvent {
+  date: string;        // "YYYY-MM-DD"
+  type: CalendarEventType;
+  name: string;        // e.g. "Perseids peak" / "Total lunar eclipse" / "Jupiter-Saturn conjunction"
+  nameZh: string;
+}
+
 // ===== Observation Records =====
 export interface ObservationRecord {
   id: string;

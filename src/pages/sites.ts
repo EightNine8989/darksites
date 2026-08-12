@@ -45,7 +45,7 @@ export function renderSitesPage(): string {
         <div class="page-sub">${t('sites.sub')}</div>
         <h1>${t('sites.title')}</h1>
       </div>
-      <button class="icon-btn" id="sitesContribute">＋</button>
+      <button class="icon-btn" id="sitesFavBtn">♥</button>
     </div>
 
     <div class="date-bar">
@@ -81,12 +81,24 @@ export function renderSitesPage(): string {
     <!-- Nearby dark sites (numbered to match map pins) -->
     <div class="section">
       <h3>${t('sites.nearby')}</h3>
-      <span class="page-sub">${t('sites.forDate')} ${dateLabel}</span>
+      <span class="page-sub">${t('sites.forDate')} ${dateLabel}${bestWindow ? ' · ' + bestWindow : ''}</span>
     </div>
     <div id="nearbySites"></div>
 
     <!-- Tonight Recommendation -->
     <div id="tonightRec"></div>
+
+    <!-- Favorites Modal -->
+    <div id="favoritesModal" class="modal">
+      <div class="sheet">
+        <div class="handle"></div>
+        <div class="row">
+          <div><div class="page-sub">${t('fav.sub')}</div><h2>${t('fav.title')}</h2></div>
+          <button class="back-btn" id="favCloseBtn">✕</button>
+        </div>
+        <div id="favList"></div>
+      </div>
+    </div>
   `;
 }
 
@@ -109,9 +121,20 @@ export function initSitesPage(): void {
     (window as any).openModal?.('equipmentModal');
   });
 
-  // Contribute button → switch to Profile tab's contributions section
-  document.getElementById('sitesContribute')?.addEventListener('click', () => {
-    (window as any).switchToProfile?.();
+  // Favorites button → open favorites modal
+  document.getElementById('sitesFavBtn')?.addEventListener('click', () => {
+    renderFavoritesList();
+    const modal = document.getElementById('favoritesModal');
+    if (modal) modal.classList.add('show');
+  });
+  document.getElementById('favCloseBtn')?.addEventListener('click', () => {
+    const modal = document.getElementById('favoritesModal');
+    if (modal) modal.classList.remove('show');
+  });
+  document.getElementById('favoritesModal')?.addEventListener('click', (e) => {
+    if (e.target === document.getElementById('favoritesModal')) {
+      document.getElementById('favoritesModal')?.classList.remove('show');
+    }
   });
 
   // Search
@@ -347,7 +370,48 @@ function updateDateBar() {
   if (equipBtn) equipBtn.querySelector('strong')!.textContent = equipmentSummary();
 }
 
-// ===== Tonight Recommendation Card =====
+// ===== Tonight Recommendation =====
+function renderFavoritesList() {
+  const container = document.getElementById('favList');
+  if (!container) return;
+
+  let ids: string[] = [];
+  try { ids = JSON.parse(localStorage.getItem('ds_favorite_objects') || '[]'); } catch { ids = []; }
+
+  const favs = ids.map(id => celestialCatalog.find(o => o.id === id)).filter(Boolean) as typeof celestialCatalog;
+
+  if (favs.length === 0) {
+    container.innerHTML = `<div class="card"><div class="meta" style="text-align:center;padding:20px 0">${t('fav.empty')}</div></div>`;
+    return;
+  }
+
+  container.innerHTML = favs.map(obj => {
+    const constLabel = obj.constellation && obj.constellation !== '—'
+      ? (ctx.language === 'zh' ? `（${obj.constellation}）` : ` (${obj.constellation})`)
+      : '';
+    const typeBadge = typeToBadge(obj.type);
+    return `
+      <div class="card clickable fav-item" data-fav-id="${obj.id}">
+        <div class="row">
+          <div style="flex:1;min-width:0">
+            <div class="place">${tCat(obj.id, 'name') || obj.name}<span class="const-sub">${constLabel}</span></div>
+            <div class="meta">${obj.description || ''}</div>
+          </div>
+          <span class="badge ${typeBadge.cls}">${typeBadge.label}</span>
+        </div>
+      </div>`;
+  }).join('');
+
+  container.querySelectorAll('[data-fav-id]').forEach(el => {
+    el.addEventListener('click', () => {
+      const id = (el as HTMLElement).dataset.favId;
+      const modal = document.getElementById('favoritesModal');
+      if (modal) modal.classList.remove('show');
+      if (id) (window as any).navigateTo?.('object-detail', id);
+    });
+  });
+}
+
 function renderTonightRecommendation() {
   const container = document.getElementById('tonightRec');
   if (!container) return;
@@ -364,13 +428,16 @@ function renderTonightRecommendation() {
   const topPicksHtml = s.topPicks.map(pick => {
     const obj = celestialCatalog.find(o => o.id === pick.objectId);
     const objName = tCat(pick.objectId, 'name') || obj?.name || pick.objectId;
+    const constLabel = obj && obj.constellation && obj.constellation !== '—'
+      ? (ctx.language === 'zh' ? `（${obj.constellation}）` : ` (${obj.constellation})`)
+      : '';
     const typeBadge = typeToBadge(obj?.type || '');
     const pickScoreClass = pick.totalScore >= 70 ? 'great' : pick.totalScore >= 40 ? 'ok' : pick.totalScore >= 20 ? 'meh' : 'bad';
     return `
       <div class="card clickable" data-object="${pick.objectId}" style="margin-bottom:8px">
         <div class="row">
           <div style="flex:1;min-width:0">
-            <div class="place">${objName}</div>
+            <div class="place">${objName}<span class="const-sub">${constLabel}</span></div>
             <div class="meta">${pick.direction} · ${isZh ? '高度' : 'Alt'} ${pick.altitude.toFixed(0)}° · ${isZh ? '最佳' : 'Best'} ${pick.bestTime}</div>
           </div>
           <div style="text-align:right;flex:0 0 auto">
@@ -426,7 +493,7 @@ function initSitesMap() {
 
   mapInstance = L.map(container, {
     center: [ctx.location.lat, ctx.location.lon],
-    zoom: 8,
+    zoom: 6,
     zoomControl: false,
     attributionControl: false,
   });
@@ -504,6 +571,6 @@ function updateMapPins() {
       ...sites.map(s => [s.lat, s.lon] as [number, number]),
     ];
     const bounds = L.latLngBounds(allPoints);
-    mapInstance.fitBounds(bounds, { padding: [30, 30], maxZoom: 10 });
+    mapInstance.fitBounds(bounds, { padding: [30, 30], maxZoom: 7 });
   }
 }

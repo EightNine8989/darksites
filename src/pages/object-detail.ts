@@ -7,6 +7,24 @@ import { computePosition, computeMoonPhase } from '../lib/astronomy';
 import { DARK_SKY_PLACES } from '../lib/dark-sky-places';
 import { t, tCat } from '../lib/i18n';
 
+// ===== Favorites Persistence =====
+const FAVORITES_KEY = 'ds_favorite_objects';
+function loadFavorites(): string[] {
+  try { return JSON.parse(localStorage.getItem(FAVORITES_KEY) || '[]'); } catch { return []; }
+}
+function saveFavorites(ids: string[]) {
+  localStorage.setItem(FAVORITES_KEY, JSON.stringify(ids));
+}
+function isFavorite(id: string): boolean {
+  return loadFavorites().includes(id);
+}
+function toggleFavorite(id: string): boolean {
+  const favs = loadFavorites();
+  const idx = favs.indexOf(id);
+  if (idx >= 0) { favs.splice(idx, 1); saveFavorites(favs); return false; }
+  favs.push(id); saveFavorites(favs); return true;
+}
+
 // ===== Season data (shared with objects.ts) =====
 const SEASON_DATA: Record<string, number[]> = {
   sirius:      [2,2,1,0,0,0,0,0,0,0,1,2],
@@ -86,6 +104,7 @@ export function renderObjectDetailPage(objectId: string): string {
   const moonInfo = computeMoonPhase(obsDate, loc);
   const seasonData = SEASON_DATA[obj.id] || Array(12).fill(2);
   const currentMonth = new Date().getMonth();
+  const favState = isFavorite(obj.id);
 
   // Season chart
   const seasonChart = MONTH_LABELS.map((m, i) => {
@@ -137,27 +156,16 @@ export function renderObjectDetailPage(objectId: string): string {
     <div class="page-top">
       <button class="back-btn" id="objDetailBack">‹</button>
       <div class="page-sub">${obj.constellation !== '—' ? obj.constellation : (ctx.language === 'zh' ? '天体' : 'Object')}</div>
-      <button class="icon-btn" id="objDetailSave">♡</button>
+      <button class="icon-btn" id="objDetailSave" style="${favState ? 'color:#ff4d6d;border-color:#ff4d6d55' : ''}">${favState ? '♥' : '♡'}</button>
     </div>
 
     <div class="hero-card">
       <div class="page-sub">${t('objDetail.seasonVis')}</div>
-      <h1 style="font-size:28px;margin:5px 0">${tCat(obj.id, 'name') || obj.name}</h1>
+      <h1 style="font-size:28px;margin:5px 0">${tCat(obj.id, 'name') || obj.name}${obj.constellation && obj.constellation !== '—' ? `<span class="const-sub" style="font-size:15px;color:var(--muted);font-weight:600">${ctx.language === 'zh' ? `（${obj.constellation}）` : ` (${obj.constellation})`}</span>` : ''}</h1>
       <div class="meta">${tCat(obj.id, 'desc') || obj.description || ''}</div>
       <div class="badges" style="margin-top:8px">
         ${(obj.equipment || []).map(e => `<span class="badge">${e}</span>`).join('')}
       </div>
-    </div>
-
-    <div class="date-bar">
-      <button class="date-btn" id="objDetailDateBtn">
-        <strong>${formatDateShort()} · ${ctx.startTime}</strong>
-        <span>${t('objDetail.changeDate')}</span>
-      </button>
-      <button class="date-btn" id="objDetailEquipBtn">
-        <strong>${ctx.language === 'zh' ? '设备匹配' : 'Matched to your gear'}</strong>
-        <span>${t('objDetail.equipSuit')}</span>
-      </button>
     </div>
 
     <!-- Season -->
@@ -234,15 +242,25 @@ export function initObjectDetailPage(): void {
     (window as any).navigateBack?.();
   });
 
-  document.getElementById('objDetailDateBtn')?.addEventListener('click', () => {
-    (window as any).openModal?.('dateModal');
-  });
-
-  document.getElementById('objDetailEquipBtn')?.addEventListener('click', () => {
-    (window as any).openModal?.('equipmentModal');
-  });
-
   document.getElementById('objDetailSave')?.addEventListener('click', () => {
-    (window as any).toast?.(t('general.saved'));
+    const btn = document.getElementById('objDetailSave');
+    if (!btn) return;
+    // Find current object id from the rendered page title / back stack
+    const route = ((window as any).getCurrentRoute?.()) as { type: string; id?: string } | undefined;
+    const id = route?.type === 'object-detail' ? route.id : undefined;
+    if (!id) return;
+
+    const nowFav = toggleFavorite(id);
+    if (nowFav) {
+      btn.textContent = '♥';
+      btn.style.color = '#ff4d6d';
+      btn.style.borderColor = '#ff4d6d55';
+      (window as any).toast?.(ctx.language === 'zh' ? '已收藏' : 'Added to favorites');
+    } else {
+      btn.textContent = '♡';
+      btn.style.color = '';
+      btn.style.borderColor = '';
+      (window as any).toast?.(ctx.language === 'zh' ? '已取消收藏' : 'Removed from favorites');
+    }
   });
 }
