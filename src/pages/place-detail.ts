@@ -1,11 +1,26 @@
 // ===== 地点详情页 =====
-// "这个暗夜地点怎么样、今晚条件如何、能看什么"
+// "这个暗夜地点怎么样、天气条件如何、能看什么"
 import { ctx, onContextChange, formatDateShort } from '../lib/context';
 import { celestialCatalog } from '../lib/catalog';
 import { computePosition, computeMoonPhase, computeSunInfo } from '../lib/astronomy';
 import { fetchHourlyWeather, computeHourlyScore, findBestWindow } from '../lib/weather';
 import { DARK_SKY_PLACES } from '../lib/dark-sky-places';
 import { t, tCat } from '../lib/i18n';
+
+// ===== Favorites Persistence (dark sites) =====
+const PLACE_FAV_KEY = 'ds_favorite_places';
+function loadPlaceFavorites(): string[] {
+  try { return JSON.parse(localStorage.getItem(PLACE_FAV_KEY) || '[]'); } catch { return []; }
+}
+function savePlaceFavorites(names: string[]) {
+  localStorage.setItem(PLACE_FAV_KEY, JSON.stringify(names));
+}
+function isPlaceFavorite(name: string): boolean {
+  return loadPlaceFavorites().includes(name);
+}
+
+// ===== Weather tab state =====
+let weatherNight: 'tonight' | 'tomorrow' = 'tonight';
 
 // ===== Render =====
 export function renderPlaceDetailPage(siteId: string): string {
@@ -36,11 +51,14 @@ export function renderPlaceDetailPage(siteId: string): string {
   // Distance from current location
   const distKm = Math.round(Math.sqrt((site.lat - ctx.location.lat) ** 2 + (site.lon - ctx.location.lon) ** 2) * 111);
 
+  // Favorite state
+  const favState = isPlaceFavorite(site.name);
+
   return `
     <div class="page-top">
       <button class="back-btn" id="placeDetailBack">‹</button>
       <div class="page-sub">${t('placeDetail.darkSite')}</div>
-      <button class="icon-btn" id="placeDetailSave">♡</button>
+      <button class="icon-btn" id="placeDetailSave" style="${favState ? 'color:#ff4d6d;border-color:#ff4d6d55' : ''}">${favState ? '♥' : '♡'}</button>
     </div>
 
     <div class="hero-card">
@@ -61,8 +79,11 @@ export function renderPlaceDetailPage(siteId: string): string {
       </button>
     </div>
 
-    <!-- Tonight conditions -->
-    <div class="section"><h3>${t('placeDetail.tonight')}</h3><span class="page-sub">${t('placeDetail.dateSensitive')}</span></div>
+    <!-- Weather conditions (6 metrics) with tonight/tomorrow toggle -->
+    <div class="segment" id="placeNightSeg" style="margin:12px 0 0">
+      <button class="seg active" data-night="tonight">${t('placeDetail.tonight')}</button>
+      <button class="seg" data-night="tomorrow">${t('placeDetail.tomorrow')}</button>
+    </div>
     <div class="grid-2" id="placeWeatherGrid">
       <div class="fact">
         <div class="label">${t('placeDetail.temp')}</div>
@@ -79,6 +100,14 @@ export function renderPlaceDetailPage(siteId: string): string {
       <div class="fact">
         <div class="label">${t('placeDetail.visibility')}</div>
         <div class="value" id="placeVisibility">—</div>
+      </div>
+      <div class="fact">
+        <div class="label">${t('placeDetail.clouds')}</div>
+        <div class="value" id="placeClouds">—</div>
+      </div>
+      <div class="fact">
+        <div class="label">${t('placeDetail.moonLight')}</div>
+        <div class="value" id="placeMoonLight">—</div>
       </div>
     </div>
 
@@ -144,8 +173,39 @@ export function initPlaceDetailPage(): void {
     (window as any).openModal?.('dateModal');
   });
 
+  // Favorite toggle (dark site)
   document.getElementById('placeDetailSave')?.addEventListener('click', () => {
-    (window as any).toast?.(t('general.saved'));
+    const btn = document.getElementById('placeDetailSave');
+    if (!btn) return;
+    const siteName = document.querySelector('.hero-card h1')?.textContent;
+    if (!siteName) return;
+
+    const favs = loadPlaceFavorites();
+    const idx = favs.indexOf(siteName);
+    if (idx >= 0) {
+      favs.splice(idx, 1);
+      btn.textContent = '♡';
+      btn.style.color = '';
+      btn.style.borderColor = '';
+      (window as any).toast?.(ctx.language === 'zh' ? '已取消收藏' : 'Removed from favorites');
+    } else {
+      favs.push(siteName);
+      btn.textContent = '♥';
+      btn.style.color = '#ff4d6d';
+      btn.style.borderColor = '#ff4d6d55';
+      (window as any).toast?.(ctx.language === 'zh' ? '已收藏' : 'Added to favorites');
+    }
+    savePlaceFavorites(favs);
+  });
+
+  // Tonight / Tomorrow weather toggle
+  document.getElementById('placeNightSeg')?.addEventListener('click', (e) => {
+    const seg = (e.target as HTMLElement).closest('.seg') as HTMLElement;
+    if (!seg) return;
+    weatherNight = (seg.dataset.night as 'tonight' | 'tomorrow') || 'tonight';
+    document.querySelectorAll('#placeNightSeg .seg').forEach(s => s.classList.remove('active'));
+    seg.classList.add('active');
+    loadWeather();
   });
 
   // Contribute button → open contribution modal
@@ -163,59 +223,76 @@ export function initPlaceDetailPage(): void {
   });
 
   // Fetch weather for best window + condition cards
+  loadWeather();
+}
+
+// ===== Weather =====
+function loadWeather() {
   const siteName = document.querySelector('.hero-card h1')?.textContent;
-  if (siteName) {
-    const site = DARK_SKY_PLACES.find(p => p.name === siteName);
-    if (site) {
-      fetchHourlyWeather({ lat: site.lat, lon: site.lon }).then(weatherData => {
-        if (!weatherData) return;
-        const obsDate = new Date(ctx.date);
-        const [hh, mm] = ctx.startTime.split(':').map(Number);
-        obsDate.setHours(hh || 22, mm || 0, 0, 0);
-        const moonInfo = computeMoonPhase(obsDate, { lat: site.lat, lon: site.lon });
-        const sunInfo = computeSunInfo(obsDate, { lat: site.lat, lon: site.lon });
+  if (!siteName) return;
+  const site = DARK_SKY_PLACES.find(p => p.name === siteName);
+  if (!site) return;
 
-        // Fill weather condition cards — pick hour closest to observation start time
-        const targetHour = obsDate.getTime();
-        let bestIdx = 0;
-        let bestDiff = Infinity;
-        weatherData.forEach((h: any, i: number) => {
-          const diff = Math.abs(new Date(h.time).getTime() - targetHour);
-          if (diff < bestDiff) { bestDiff = diff; bestIdx = i; }
-        });
-        const hw = weatherData[bestIdx];
-        if (hw) {
-          const isZh = (ctx.language || 'zh') === 'zh';
-          const setVal = (id: string, v: string) => {
-            const el = document.getElementById(id);
-            if (el) el.textContent = v;
-          };
-          setVal('placeTemp', `${Math.round(hw.temperature)}°C`);
-          setVal('placeHumidity', `${Math.round(hw.humidity)}%`);
-          const windLabel = hw.windSpeed > 15 ? (isZh ? '大风' : 'Windy')
-            : hw.windSpeed > 10 ? (isZh ? '有风' : 'Breezy')
-            : (isZh ? '微风' : 'Calm');
-          setVal('placeWind', `${Math.round(hw.windSpeed)} km/h · ${windLabel}`);
-          const visLabel = hw.visibility < 5 ? (isZh ? '较差' : 'Poor')
-            : hw.visibility < 10 ? (isZh ? '一般' : 'Fair')
-            : (isZh ? '良好' : 'Good');
-          setVal('placeVisibility', `${hw.visibility} km · ${visLabel}`);
-        }
+  const isZh = (ctx.language || 'zh') === 'zh';
 
-        const hourlyScores = weatherData.filter((_: any, i: number) => i % 2 === 0).map((h: any) => {
-          const r = computeHourlyScore({
-            cloudCover: h.cloudCover, moonAltitude: moonInfo.altitude,
-            moonIllumination: moonInfo.illumination, sunAltitude: sunInfo.altitude,
-            windSpeed: h.windSpeed, bortle: site.bortle, visibility: h.visibility
-          });
-          return { time: new Date(h.time), score: r.score };
-        });
-        const window = findBestWindow(hourlyScores);
-        const el = document.getElementById('placeBestWindow');
-        if (el && window) el.textContent = `${window.start}–${window.end}`;
-      }).catch(() => {});
+  fetchHourlyWeather({ lat: site.lat, lon: site.lon }).then(weatherData => {
+    if (!weatherData) return;
+
+    const [hh, mm] = ctx.startTime.split(':').map(Number);
+    // Base date for "tonight"; tomorrow = +1 day
+    const baseDate = new Date(ctx.date);
+    baseDate.setHours(hh || 22, mm || 0, 0, 0);
+    const targetDate = new Date(baseDate.getTime());
+    if (weatherNight === 'tomorrow') targetDate.setDate(targetDate.getDate() + 1);
+
+    const loc = { lat: site.lat, lon: site.lon };
+    const moonInfo = computeMoonPhase(targetDate, loc);
+    const sunInfo = computeSunInfo(targetDate, loc);
+
+    // Fill weather condition cards — pick hour closest to observation start time
+    const targetHour = targetDate.getTime();
+    let bestIdx = 0;
+    let bestDiff = Infinity;
+    weatherData.forEach((h: any, i: number) => {
+      const diff = Math.abs(new Date(h.time).getTime() - targetHour);
+      if (diff < bestDiff) { bestDiff = diff; bestIdx = i; }
+    });
+    const hw = weatherData[bestIdx];
+    if (hw) {
+      const setVal = (id: string, v: string) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = v;
+      };
+      setVal('placeTemp', `${Math.round(hw.temperature)}°C`);
+      setVal('placeHumidity', `${Math.round(hw.humidity)}%`);
+      const windLabel = hw.windSpeed > 15 ? (isZh ? '大风' : 'Windy')
+        : hw.windSpeed > 10 ? (isZh ? '有风' : 'Breezy')
+        : (isZh ? '微风' : 'Calm');
+      setVal('placeWind', `${Math.round(hw.windSpeed)} km/h · ${windLabel}`);
+      const visLabel = hw.visibility < 5 ? (isZh ? '较差' : 'Poor')
+        : hw.visibility < 10 ? (isZh ? '一般' : 'Fair')
+        : (isZh ? '良好' : 'Good');
+      setVal('placeVisibility', `${hw.visibility} km · ${visLabel}`);
+      const cloudLabel = hw.cloudCover > 60 ? (isZh ? '多云' : 'Cloudy')
+        : hw.cloudCover > 30 ? (isZh ? '部分多云' : 'Partly cloudy')
+        : (isZh ? '晴朗' : 'Clear');
+      setVal('placeClouds', `${hw.cloudCover}% · ${cloudLabel}`);
+      const moonPct = Math.round(moonInfo.illumination * 100);
+      setVal('placeMoonLight', `${moonPct}%`);
     }
-  }
+
+    const hourlyScores = weatherData.filter((_: any, i: number) => i % 2 === 0).map((h: any) => {
+      const r = computeHourlyScore({
+        cloudCover: h.cloudCover, moonAltitude: moonInfo.altitude,
+        moonIllumination: moonInfo.illumination, sunAltitude: sunInfo.altitude,
+        windSpeed: h.windSpeed, bortle: site.bortle, visibility: h.visibility
+      });
+      return { time: new Date(h.time), score: r.score };
+    });
+    const window = findBestWindow(hourlyScores);
+    const el = document.getElementById('placeBestWindow');
+    if (el && window) el.textContent = `${window.start}–${window.end}`;
+  }).catch(() => {});
 }
 
 // ===== Helpers =====

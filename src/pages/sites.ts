@@ -33,6 +33,26 @@ let bestWindow = '';
 let tonightSummary: TonightSummary | null = null;
 let mapInstance: L.Map | null = null;
 let mapMarkers: L.Layer[] = [];
+let mapRadiusCircle: L.Circle | null = null;
+
+// ===== 500km radius selection =====
+const RADIUS_KM = 500;
+
+function placeInRange(p: { lat: number; lon: number }, loc: { lat: number; lon: number }): boolean {
+  const dLat = (p.lat - loc.lat) * 111;
+  const dLon = (p.lon - loc.lon) * 111 * Math.cos(loc.lat * Math.PI / 180);
+  return Math.sqrt(dLat * dLat + dLon * dLon) <= RADIUS_KM;
+}
+
+function siteMatchesTarget(site: { bortle: number; type: string }): boolean {
+  const target = ctx.activeTarget;
+  if (target === 'all') return true;
+  if (target === 'milkyway') return site.bortle <= 3;   // 银河需要暗夜
+  if (target === 'meteor') return site.bortle <= 4;     // 流星雨对光害稍宽容
+  if (target === 'moon') return true;                   // 月亮任意地点
+  if (target === 'planets') return true;                // 行星任意地点
+  return true;
+}
 
 // ===== Render =====
 export function renderSitesPage(): string {
@@ -96,6 +116,10 @@ export function renderSitesPage(): string {
           <div><div class="page-sub">${t('fav.sub')}</div><h2>${t('fav.title')}</h2></div>
           <button class="back-btn" id="favCloseBtn">✕</button>
         </div>
+        <div class="segment" id="favTabs">
+          <button class="seg active" data-favtab="places">${t('fav.tabPlaces')}</button>
+          <button class="seg" data-favtab="objects">${t('fav.tabObjects')}</button>
+        </div>
         <div id="favList"></div>
       </div>
     </div>
@@ -130,6 +154,11 @@ export function initSitesPage(): void {
   document.getElementById('favCloseBtn')?.addEventListener('click', () => {
     const modal = document.getElementById('favoritesModal');
     if (modal) modal.classList.remove('show');
+  });
+  document.getElementById('favTabs')?.addEventListener('click', (e) => {
+    const seg = (e.target as HTMLElement).closest('.seg') as HTMLElement;
+    if (!seg) return;
+    renderFavoritesList(seg.dataset.favtab as 'places' | 'objects');
   });
   document.getElementById('favoritesModal')?.addEventListener('click', (e) => {
     if (e.target === document.getElementById('favoritesModal')) {
@@ -237,7 +266,7 @@ async function recalculate() {
     const obsDate2 = new Date(ctx.date);
     obsDate2.setHours(hh2 || 22, mm2 || 0, 0, 0);
     tonightSummary = await computeTonightSummary(
-      celestialCatalog,
+      celestialCatalog.filter(obj => filterByTarget(obj.type)),
       { lat: ctx.location.lat, lon: ctx.location.lon },
       obsDate2,
       ctx.equipment,
@@ -281,6 +310,8 @@ function renderNearbySites() {
 
   const loc = ctx.location;
   const sites = DARK_SKY_PLACES
+    .filter(p => placeInRange(p, loc))
+    .filter(p => siteMatchesTarget(p))
     .map(p => ({
       ...p,
       distKm: Math.round(Math.sqrt((p.lat - loc.lat)**2 + (p.lon - loc.lon)**2) * 111),
@@ -371,10 +402,55 @@ function updateDateBar() {
 }
 
 // ===== Tonight Recommendation =====
-function renderFavoritesList() {
+function renderFavoritesList(tab: 'places' | 'objects' = 'places') {
   const container = document.getElementById('favList');
   if (!container) return;
 
+  // Track active tab on the segment buttons
+  document.querySelectorAll('#favTabs .seg').forEach(s => {
+    const seg = s as HTMLElement;
+    seg.classList.toggle('active', seg.dataset.favtab === tab);
+  });
+
+  if (tab === 'places') {
+    // Favorite dark sites
+    let ids: string[] = [];
+    try { ids = JSON.parse(localStorage.getItem('ds_favorite_places') || '[]'); } catch { ids = []; }
+
+    const favs = ids.map(id => DARK_SKY_PLACES.find(p => p.name === id)).filter(Boolean) as typeof DARK_SKY_PLACES;
+
+    if (favs.length === 0) {
+      container.innerHTML = `<div class="card"><div class="meta" style="text-align:center;padding:20px 0">${t('fav.emptyPlaces')}</div></div>`;
+      return;
+    }
+
+    container.innerHTML = favs.map(p => {
+      const scoreVal = Math.max(10, 100 - p.bortle * 10);
+      const scoreCls = scoreVal >= 70 ? 'great' : scoreVal >= 40 ? 'ok' : 'meh';
+      return `
+        <div class="card clickable fav-item" data-fav-place="${p.name}">
+          <div class="row">
+            <div style="flex:1;min-width:0">
+              <div class="place">${p.name}</div>
+              <div class="meta">${p.region} · Bortle ${p.bortle} · ${p.type}${p.yearCert ? ' · ' + t('status.official') : ''}</div>
+            </div>
+            <div class="score ${scoreCls}" style="width:40px;height:40px;font-size:16px">${scoreVal}</div>
+          </div>
+        </div>`;
+    }).join('');
+
+    container.querySelectorAll('[data-fav-place]').forEach(el => {
+      el.addEventListener('click', () => {
+        const name = (el as HTMLElement).dataset.favPlace;
+        const modal = document.getElementById('favoritesModal');
+        if (modal) modal.classList.remove('show');
+        if (name) (window as any).navigateTo?.('place-detail', name);
+      });
+    });
+    return;
+  }
+
+  // === objects tab ===
   let ids: string[] = [];
   try { ids = JSON.parse(localStorage.getItem('ds_favorite_objects') || '[]'); } catch { ids = []; }
 
@@ -513,6 +589,17 @@ function initSitesMap() {
   });
   L.marker([ctx.location.lat, ctx.location.lon], { icon: youIcon }).addTo(mapInstance);
 
+  // 500km radius circle around user
+  mapRadiusCircle = L.circle([ctx.location.lat, ctx.location.lon], {
+    radius: RADIUS_KM * 1000,
+    color: '#4d8cff',
+    weight: 1,
+    opacity: 0.5,
+    fillColor: '#4d8cff',
+    fillOpacity: 0.05,
+    interactive: false,
+  }).addTo(mapInstance);
+
   // Nearby dark site pins
   updateMapPins();
 
@@ -531,6 +618,8 @@ function updateMapPins() {
 
   const loc = ctx.location;
   const sites = DARK_SKY_PLACES
+    .filter(p => placeInRange(p, loc))
+    .filter(p => siteMatchesTarget(p))
     .map(p => ({
       ...p,
       distKm: Math.round(Math.sqrt((p.lat - loc.lat) ** 2 + (p.lon - loc.lon) ** 2) * 111),
@@ -564,13 +653,13 @@ function updateMapPins() {
     mapMarkers.push(marker);
   });
 
-  // Fit bounds to show all pins + user
-  if (sites.length > 0) {
-    const allPoints = [
-      [loc.lat, loc.lon] as [number, number],
-      ...sites.map(s => [s.lat, s.lon] as [number, number]),
-    ];
-    const bounds = L.latLngBounds(allPoints);
-    mapInstance.fitBounds(bounds, { padding: [30, 30], maxZoom: 7 });
-  }
+  // Fit map to always show the full 500km radius area centered on user
+  // 500km ≈ 4.5° of latitude; widen longitude by cos(lat) for accuracy
+  const latSpan = 4.5;
+  const lonSpan = 4.5 / Math.max(0.2, Math.cos(loc.lat * Math.PI / 180));
+  const bounds = L.latLngBounds(
+    [loc.lat - latSpan, loc.lon - lonSpan],
+    [loc.lat + latSpan, loc.lon + lonSpan]
+  );
+  mapInstance.fitBounds(bounds, { padding: [10, 10], maxZoom: 6 });
 }

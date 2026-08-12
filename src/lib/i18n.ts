@@ -28,8 +28,11 @@ const translations: Record<string, Record<Lang, string>> = {
 
   // === Favorites ===
   'fav.sub':             { zh: '我的收藏', en: 'My favorites' },
-  'fav.title':           { zh: '星星收藏夹', en: 'Favorite objects' },
+  'fav.title':           { zh: '收藏夹', en: 'Favorites' },
   'fav.empty':           { zh: '还没有收藏天体。去天体页点 ♡ 收藏你的目标吧。', en: 'No favorites yet. Tap ♡ on any object to save it here.' },
+  'fav.tabPlaces':       { zh: '观测站', en: 'Sites' },
+  'fav.tabObjects':      { zh: '星星', en: 'Objects' },
+  'fav.emptyPlaces':     { zh: '还没有收藏观测站。去地点页点 ♡ 收藏吧。', en: 'No favorite sites yet. Tap ♡ on any dark site to save it here.' },
 
   // === Chip Filters ===
   'filter.all':       { zh: '全部', en: 'All' },
@@ -81,8 +84,10 @@ const translations: Record<string, Record<Lang, string>> = {
   // === Place Detail ===
   'placeDetail.darkSite':  { zh: '暗夜地点', en: 'Dark Site' },
   'placeDetail.tonight':   { zh: '今晚', en: 'Tonight' },
+  'placeDetail.tomorrow':  { zh: '明晚', en: 'Tomorrow night' },
   'placeDetail.dateSensitive': { zh: '随日期变化', en: 'Date-sensitive' },
   'placeDetail.clouds':    { zh: '云量', en: 'Clouds' },
+  'placeDetail.moonLight': { zh: '月光照亮', en: 'Moon illumination' },
   'placeDetail.moonImpact':{ zh: '月相影响', en: 'Moon impact' },
   'placeDetail.lightPoll': { zh: '光污染', en: 'Light pollution' },
   'placeDetail.elevation': { zh: '海拔', en: 'Elevation' },
