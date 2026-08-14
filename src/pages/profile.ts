@@ -296,7 +296,7 @@ function renderRecordsSection(): string {
       </div>
     </div>
 
-    <div class="section"><h3>${t('profile.obsLog')}</h3><button style="color:var(--blue);font-size:12px;border:0;background:transparent" id="addRecord">${t('profile.add')}</button></div>
+    <div class="section"><h3>${t('profile.obsLog')}</h3></div>
     ${records.length > 0 ? records.map(r => {
       const targetBadges = r.targets.map(t2 => {
         const typeInfo = typeToInfo(t2.type);
@@ -323,24 +323,6 @@ function renderRecordsSection(): string {
 }
 
 function initRecordsSection() {
-  document.getElementById('addRecord')?.addEventListener('click', () => {
-    const newRecord: ObservationRecord = {
-      id: `rec-${Date.now()}`,
-      date: ctx.date.toISOString().split('T')[0],
-      startTime: ctx.startTime,
-      locationName: ctx.location.name,
-      bortle: ctx.location.bortle,
-      targets: [],
-      notes: '',
-      createdAt: new Date().toISOString(),
-    };
-    const records = loadRecords();
-    records.unshift(newRecord);
-    saveRecords(records);
-    (window as any).toast?.(t('profile.newSession'));
-    renderProfileContent();
-  });
-
   document.querySelectorAll('[data-record-id]').forEach(el => {
     el.addEventListener('click', () => {
       (window as any).toast?.(ctx.language === 'zh' ? '会话详情开发中' : 'Session detail coming soon');

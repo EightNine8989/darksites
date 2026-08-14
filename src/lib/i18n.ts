@@ -44,7 +44,7 @@ const translations: Record<string, Record<Lang, string>> = {
   'filter.deepSky':    { zh: '深空天体', en: 'Deep Sky' },
 
   // === Objects Page ===
-  'objects.sub':       { zh: '今晚看什么', en: 'What is worth seeing?' },
+  'objects.sub':       { zh: '你想看什么', en: 'What do you want to see?' },
   'objects.title':     { zh: '天体', en: 'Objects' },
   'objects.heroTitle': { zh: '规划你的观测', en: 'Plan your observation' },
   'objects.heroDesc':  { zh: '浏览今晚所有可见天体，按高度角、亮度或名称排序，按类型或设备筛选。', en: 'Browse all visible objects tonight. Sort by altitude, brightness, or name. Filter by type or your equipment.' },
@@ -188,6 +188,8 @@ const translations: Record<string, Record<Lang, string>> = {
   // === Tonight Picks ===
   'tonight.picks':       { zh: '今晚推荐', en: 'Tonight picks' },
   'tonight.score':       { zh: '今晚观测评分', en: 'Tonight score' },
+  'tonight.tomorrowPicks': { zh: '明晚推荐', en: 'Tomorrow picks' },
+  'tonight.tomorrowScore': { zh: '明晚观测评分', en: 'Tomorrow score' },
 
   // === Contribution ===
   'contrib.modalTitle':  { zh: '贡献地点报告', en: 'Contribute site report' },

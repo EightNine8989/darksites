@@ -22,6 +22,9 @@ function isPlaceFavorite(name: string): boolean {
 // ===== Weather tab state =====
 let weatherNight: 'tonight' | 'tomorrow' = 'tonight';
 
+// ===== Context listener (unregistered on re-init to avoid duplicates) =====
+let unsubContext: (() => void) | null = null;
+
 // ===== Render =====
 export function renderPlaceDetailPage(siteId: string): string {
   // Find site by name or coordinates
@@ -224,6 +227,19 @@ export function initPlaceDetailPage(): void {
 
   // Fetch weather for best window + condition cards
   loadWeather();
+
+  // Context change (date/time) → re-render the whole page
+  // Unregister previous listener first (context.ts uses a Set — listeners accumulate on re-init)
+  if (unsubContext) unsubContext();
+  unsubContext = onContextChange(() => {
+    const route = ((window as any).getCurrentRoute?.()) as { type: string; id?: string } | undefined;
+    const siteId = route?.type === 'place-detail' ? route.id : undefined;
+    if (!siteId) return;
+    const container = document.getElementById('pageContainer');
+    if (!container) return;
+    container.innerHTML = renderPlaceDetailPage(siteId);
+    initPlaceDetailPage();
+  });
 }
 
 // ===== Weather =====

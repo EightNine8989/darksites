@@ -3,7 +3,8 @@
 import type { CelestialObject, CelestialPosition } from '../types';
 import { ctx, onContextChange, formatDateShort } from '../lib/context';
 import { celestialCatalog } from '../lib/catalog';
-import { computePosition, computeMoonPhase } from '../lib/astronomy';
+import { computePosition, computeMoonPhase, computeSunInfo } from '../lib/astronomy';
+import { fetchHourlyWeather } from '../lib/weather';
 import { DARK_SKY_PLACES } from '../lib/dark-sky-places';
 import { t, tCat } from '../lib/i18n';
 
@@ -24,6 +25,12 @@ function toggleFavorite(id: string): boolean {
   if (idx >= 0) { favs.splice(idx, 1); saveFavorites(favs); return false; }
   favs.push(id); saveFavorites(favs); return true;
 }
+
+// ===== Weather tab state =====
+let weatherNight: 'tonight' | 'tomorrow' = 'tonight';
+
+// ===== Context listener (unregistered on re-init to avoid duplicates) =====
+let unsubContext: (() => void) | null = null;
 
 // ===== Season data (shared with objects.ts) =====
 const SEASON_DATA: Record<string, number[]> = {
@@ -206,6 +213,39 @@ export function renderObjectDetailPage(objectId: string): string {
       ${tCat(obj.id, 'name') || obj.name} ${t('objDetail.belowHorizon')}
     </div></div>`}
 
+    <!-- Weather conditions (6 metrics) with tonight/tomorrow toggle -->
+    <div class="section"><h3>${t('placeDetail.forecast')}</h3></div>
+    <div class="segment" id="objNightSeg" style="margin:0 0 12px">
+      <button class="seg active" data-night="tonight">${t('placeDetail.tonight')}</button>
+      <button class="seg" data-night="tomorrow">${t('placeDetail.tomorrow')}</button>
+    </div>
+    <div class="grid-2" id="objWeatherGrid">
+      <div class="fact">
+        <div class="label">${t('placeDetail.temp')}</div>
+        <div class="value" id="objTemp">—</div>
+      </div>
+      <div class="fact">
+        <div class="label">${t('placeDetail.humidity')}</div>
+        <div class="value" id="objHumidity">—</div>
+      </div>
+      <div class="fact">
+        <div class="label">${t('placeDetail.wind')}</div>
+        <div class="value" id="objWind">—</div>
+      </div>
+      <div class="fact">
+        <div class="label">${t('placeDetail.visibility')}</div>
+        <div class="value" id="objVisibility">—</div>
+      </div>
+      <div class="fact">
+        <div class="label">${t('placeDetail.clouds')}</div>
+        <div class="value" id="objClouds">—</div>
+      </div>
+      <div class="fact">
+        <div class="label">${t('placeDetail.moonLight')}</div>
+        <div class="value" id="objMoonLight">—</div>
+      </div>
+    </div>
+
     <!-- Equipment -->
     <div class="section"><h3>${t('objDetail.equipment')}</h3><span class="page-sub">${t('objDetail.recommended')}</span></div>
     <div class="card">
@@ -263,4 +303,84 @@ export function initObjectDetailPage(): void {
       (window as any).toast?.(ctx.language === 'zh' ? '已取消收藏' : 'Removed from favorites');
     }
   });
+
+  // Tonight / Tomorrow weather toggle
+  document.getElementById('objNightSeg')?.addEventListener('click', (e) => {
+    const seg = (e.target as HTMLElement).closest('.seg') as HTMLElement;
+    if (!seg) return;
+    weatherNight = (seg.dataset.night as 'tonight' | 'tomorrow') || 'tonight';
+    document.querySelectorAll('#objNightSeg .seg').forEach(s => s.classList.remove('active'));
+    seg.classList.add('active');
+    loadObjectWeather();
+  });
+
+  // Fetch weather for condition cards
+  loadObjectWeather();
+
+  // Context change (date/time) → re-render the whole page
+  if (unsubContext) unsubContext();
+  unsubContext = onContextChange(() => {
+    const route = ((window as any).getCurrentRoute?.()) as { type: string; id?: string } | undefined;
+    const objectId = route?.type === 'object-detail' ? route.id : undefined;
+    if (!objectId) return;
+    const container = document.getElementById('pageContainer');
+    if (!container) return;
+    container.innerHTML = renderObjectDetailPage(objectId);
+    initObjectDetailPage();
+  });
+}
+
+// ===== Object Weather (6 metrics, mirroring place-detail) =====
+function loadObjectWeather() {
+  const route = ((window as any).getCurrentRoute?.()) as { type: string; id?: string } | undefined;
+  const objectId = route?.type === 'object-detail' ? route.id : undefined;
+  if (!objectId) return;
+  const obj = celestialCatalog.find(o => o.id === objectId);
+  if (!obj) return;
+
+  const loc = { lat: ctx.location.lat, lon: ctx.location.lon };
+  const isZh = (ctx.language || 'zh') === 'zh';
+
+  fetchHourlyWeather(loc).then(weatherData => {
+    if (!weatherData) return;
+
+    const [hh, mm] = ctx.startTime.split(':').map(Number);
+    const baseDate = new Date(ctx.date);
+    baseDate.setHours(hh || 22, mm || 0, 0, 0);
+    const targetDate = new Date(baseDate.getTime());
+    if (weatherNight === 'tomorrow') targetDate.setDate(targetDate.getDate() + 1);
+
+    const moonInfo = computeMoonPhase(targetDate, loc);
+
+    const targetHour = targetDate.getTime();
+    let bestIdx = 0;
+    let bestDiff = Infinity;
+    weatherData.forEach((h: any, i: number) => {
+      const diff = Math.abs(new Date(h.time).getTime() - targetHour);
+      if (diff < bestDiff) { bestDiff = diff; bestIdx = i; }
+    });
+    const hw = weatherData[bestIdx];
+    if (hw) {
+      const setVal = (id: string, v: string) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = v;
+      };
+      setVal('objTemp', `${Math.round(hw.temperature)}°C`);
+      setVal('objHumidity', `${Math.round(hw.humidity)}%`);
+      const windLabel = hw.windSpeed > 15 ? (isZh ? '大风' : 'Windy')
+        : hw.windSpeed > 10 ? (isZh ? '有风' : 'Breezy')
+        : (isZh ? '微风' : 'Calm');
+      setVal('objWind', `${Math.round(hw.windSpeed)} km/h · ${windLabel}`);
+      const visLabel = hw.visibility < 5 ? (isZh ? '较差' : 'Poor')
+        : hw.visibility < 10 ? (isZh ? '一般' : 'Fair')
+        : (isZh ? '良好' : 'Good');
+      setVal('objVisibility', `${hw.visibility} km · ${visLabel}`);
+      const cloudLabel = hw.cloudCover > 60 ? (isZh ? '多云' : 'Cloudy')
+        : hw.cloudCover > 30 ? (isZh ? '部分多云' : 'Partly cloudy')
+        : (isZh ? '晴朗' : 'Clear');
+      setVal('objClouds', `${hw.cloudCover}% · ${cloudLabel}`);
+      const moonPct = Math.round(moonInfo.illumination * 100);
+      setVal('objMoonLight', `${moonPct}%`);
+    }
+  }).catch(() => {});
 }

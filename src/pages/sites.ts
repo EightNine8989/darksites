@@ -31,9 +31,13 @@ let overallScore = 0;
 let moonPhaseName = '';
 let bestWindow = '';
 let tonightSummary: TonightSummary | null = null;
+let tomorrowSummary: TonightSummary | null = null;
 let mapInstance: L.Map | null = null;
 let mapMarkers: L.Layer[] = [];
 let mapRadiusCircle: L.Circle | null = null;
+
+// ===== Context listener (unregistered on re-init to avoid duplicates) =====
+let unsubSitesContext: (() => void) | null = null;
 
 // ===== 500km radius selection =====
 const RADIUS_KM = 500;
@@ -101,7 +105,7 @@ export function renderSitesPage(): string {
     <!-- Nearby dark sites (numbered to match map pins) -->
     <div class="section">
       <h3>${t('sites.nearby')}</h3>
-      <span class="page-sub">${t('sites.forDate')} ${dateLabel}${bestWindow ? ' · ' + bestWindow : ''}</span>
+      <span class="page-sub" id="nearbyDateSub">${t('sites.forDate')} ${dateLabel}${bestWindow ? ' · ' + bestWindow : ''}</span>
     </div>
     <div id="nearbySites"></div>
 
@@ -172,8 +176,9 @@ export function initSitesPage(): void {
     if (q) highlightSite(q);
   });
 
-  // Context change listener
-  onContextChange(() => {
+  // Context change listener (unregister previous to avoid duplicates)
+  if (unsubSitesContext) unsubSitesContext();
+  unsubSitesContext = onContextChange(() => {
     updateDateBar();
     recalculate();
   });
@@ -260,19 +265,21 @@ async function recalculate() {
     console.error('recalculate error:', err);
   }
 
-  // Compute tonight summary (async, separate from compass)
+  // Compute tonight + tomorrow summaries (async, separate from compass)
   try {
     const [hh2, mm2] = ctx.startTime.split(':').map(Number);
     const obsDate2 = new Date(ctx.date);
     obsDate2.setHours(hh2 || 22, mm2 || 0, 0, 0);
-    tonightSummary = await computeTonightSummary(
-      celestialCatalog.filter(obj => filterByTarget(obj.type)),
-      { lat: ctx.location.lat, lon: ctx.location.lon },
-      obsDate2,
-      ctx.equipment,
-      ctx.location.bortle,
-      ctx.language || 'zh'
-    );
+    const obsDate3 = new Date(obsDate2.getTime());
+    obsDate3.setDate(obsDate3.getDate() + 1);
+
+    const catalog = celestialCatalog.filter(obj => filterByTarget(obj.type));
+    const loc = { lat: ctx.location.lat, lon: ctx.location.lon };
+
+    [tonightSummary, tomorrowSummary] = await Promise.all([
+      computeTonightSummary(catalog, loc, obsDate2, ctx.equipment, ctx.location.bortle, ctx.language || 'zh'),
+      computeTonightSummary(catalog, loc, obsDate3, ctx.equipment, ctx.location.bortle, ctx.language || 'zh'),
+    ]);
     overallScore = tonightSummary.overallScore;
     bestWindow = tonightSummary.bestWindow;
     renderTonightRecommendation();
@@ -399,6 +406,8 @@ function updateDateBar() {
   const equipBtn = document.getElementById('sitesEquipBtn');
   if (dateBtn) dateBtn.querySelector('strong')!.textContent = `${formatDateShort()} · ${ctx.startTime}`;
   if (equipBtn) equipBtn.querySelector('strong')!.textContent = equipmentSummary();
+  const nearbySub = document.getElementById('nearbyDateSub');
+  if (nearbySub) nearbySub.textContent = `${t('sites.forDate')} ${formatDateShort()}${bestWindow ? ' · ' + bestWindow : ''}`;
 }
 
 // ===== Tonight Recommendation =====
@@ -492,12 +501,26 @@ function renderTonightRecommendation() {
   const container = document.getElementById('tonightRec');
   if (!container) return;
 
-  if (!tonightSummary) {
+  if (!tonightSummary && !tomorrowSummary) {
     container.innerHTML = '';
     return;
   }
 
-  const s = tonightSummary;
+  container.innerHTML = `
+    ${tonightSummary ? renderSummaryBlock(tonightSummary, 'tonight') : ''}
+    ${tomorrowSummary ? renderSummaryBlock(tomorrowSummary, 'tomorrow') : ''}
+  `;
+
+  // Click handlers for recommended objects
+  container.querySelectorAll('[data-object]').forEach(el => {
+    el.addEventListener('click', () => {
+      const id = (el as HTMLElement).dataset.object;
+      if (id) (window as any).navigateTo?.('object-detail', id);
+    });
+  });
+}
+
+function renderSummaryBlock(s: TonightSummary, night: 'tonight' | 'tomorrow'): string {
   const isZh = (ctx.language || 'zh') === 'zh';
   const scoreClass = s.overallScore >= 70 ? 'great' : s.overallScore >= 40 ? 'ok' : s.overallScore >= 20 ? 'meh' : 'bad';
 
@@ -528,16 +551,19 @@ function renderTonightRecommendation() {
       </div>`;
   }).join('');
 
-  container.innerHTML = `
+  const title = night === 'tonight' ? t('tonight.picks') : t('tonight.tomorrowPicks');
+  const scoreLabel = night === 'tonight' ? t('tonight.score') : t('tonight.tomorrowScore');
+
+  return `
     <div class="section">
-      <h3>${isZh ? '今晚推荐' : 'Tonight picks'}</h3>
+      <h3>${title}</h3>
       <span class="page-sub">${s.moonPhase}${s.bestWindow ? ' · ' + s.bestWindow : ''}</span>
     </div>
     <div class="hero-card" style="margin-bottom:12px">
       <div style="display:flex;align-items:end;gap:8px;margin-bottom:8px">
         <div class="score ${scoreClass}" style="width:56px;height:56px;font-size:24px;border-radius:17px">${s.overallScore}</div>
         <div>
-          <div style="font-weight:800;font-size:16px">${isZh ? '今晚观测评分' : 'Tonight score'}</div>
+          <div style="font-weight:800;font-size:16px">${scoreLabel}</div>
           <div class="meta">${s.moonImpact}</div>
         </div>
       </div>
@@ -546,14 +572,6 @@ function renderTonightRecommendation() {
     </div>
     ${topPicksHtml}
   `;
-
-  // Click handlers for recommended objects
-  container.querySelectorAll('[data-object]').forEach(el => {
-    el.addEventListener('click', () => {
-      const id = (el as HTMLElement).dataset.object;
-      if (id) (window as any).navigateTo?.('object-detail', id);
-    });
-  });
 }
 
 // ===== Leaflet Map =====

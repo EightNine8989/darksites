@@ -1,5 +1,5 @@
 // ===== Observe Page — 观测贴士 + 观测日记 + 日历打卡 =====
-import { ctx, formatDateShort, equipmentSummary } from '../lib/context';
+import { ctx, onContextChange, formatDateShort, equipmentSummary } from '../lib/context';
 import { t } from '../lib/i18n';
 import { computeMoonPhase, computeSunInfo } from '../lib/astronomy';
 import type { DiaryEntry, CalendarEvent } from '../types';
@@ -7,6 +7,14 @@ import type { DiaryEntry, CalendarEvent } from '../types';
 // ===== Diary Persistence =====
 const DIARY_KEY = 'ds_diary_entries';
 const OBSERVED_KEY = 'ds_observed_dates';
+
+/** 本地时区的 YYYY-MM-DD（避免 toISOString 的 UTC 偏移导致日期差一天） */
+function toLocalDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 
 function loadDiaries(): DiaryEntry[] {
   try { return JSON.parse(localStorage.getItem(DIARY_KEY) || '[]'); } catch { return []; }
@@ -127,7 +135,7 @@ function generateTips(): TipData[] {
   }
 
   // Tip 4: Check for upcoming events
-  const today = ctx.date.toISOString().split('T')[0];
+  const today = toLocalDateStr(ctx.date);
   const upcomingEvent = CALENDAR_EVENTS.find(e => e.date >= today);
   if (upcomingEvent) {
     const dayOffset = Math.round((new Date(upcomingEvent.date).getTime() - ctx.date.getTime()) / 86400000);
@@ -303,7 +311,7 @@ function renderNewDiaryModal(): string {
       </div>
       <div class="field">
         <label>${(ctx.language || 'zh') === 'zh' ? '日期' : 'Date'}</label>
-        <input id="diaryDate" type="date" value="${ctx.date.toISOString().split('T')[0]}">
+        <input id="diaryDate" type="date" value="${toLocalDateStr(ctx.date)}">
       </div>
       <div class="field">
         <label>${(ctx.language || 'zh') === 'zh' ? '时间' : 'Time'}</label>
@@ -333,16 +341,16 @@ export function renderObservePage(): string {
       <div class="page-sub">${t('observe.sub')}</div>
       <h1>${t('observe.title')}</h1>
     </div>
-    <button class="icon-btn" onclick="(window as any).openModal('equipmentModal')">⚙︎</button>
+    <button class="icon-btn" onclick="window.openModal('equipmentModal')">⚙︎</button>
   </div>
 
   <!-- Context bar -->
   <div class="date-bar">
-    <button class="date-btn" onclick="(window as any).openModal('dateModal')">
+    <button class="date-btn" onclick="window.openModal('dateModal')">
       <strong>${dateStr} · ${ctx.startTime}</strong>
       <span>${(ctx.language || 'zh') === 'zh' ? '观测日期' : 'Observation date'}</span>
     </button>
-    <button class="date-btn" onclick="(window as any).openModal('equipmentModal')">
+    <button class="date-btn" onclick="window.openModal('equipmentModal')">
       <strong>${equipStr}</strong>
       <span>${(ctx.language || 'zh') === 'zh' ? '当前设备' : 'Current equipment'}</span>
     </button>
@@ -358,7 +366,7 @@ export function renderObservePage(): string {
   <!-- Journal -->
   <div class="section">
     <h3>${t('observe.journal')}</h3>
-    <button style="border:0;background:transparent;color:var(--blue);font-size:12px;padding:0" onclick="(window as any).openNewDiaryModal()">${t('observe.newEntry')}</button>
+    <button style="border:0;background:transparent;color:var(--blue);font-size:12px;padding:0" onclick="window.openNewDiaryModal()">${t('observe.newEntry')}</button>
   </div>
   ${renderDiarySection()}
 
@@ -371,7 +379,19 @@ export function renderObservePage(): string {
 }
 
 // ===== Init =====
+// Context listener (unregistered on re-init to avoid duplicates)
+let unsubObserveContext: (() => void) | null = null;
+
 export function initObservePage() {
+  // Context change (date/time/equipment/language) → re-render the whole page
+  if (unsubObserveContext) unsubObserveContext();
+  unsubObserveContext = onContextChange(() => {
+    const container = document.getElementById('pageContainer');
+    if (!container) return;
+    container.innerHTML = renderObservePage();
+    initObservePage();
+  });
+
   // Calendar day click — toggle observed
   document.querySelectorAll('.cal-day:not(.empty)').forEach(el => {
     el.addEventListener('click', () => {
@@ -407,7 +427,7 @@ export function initObservePage() {
 
     const entry: DiaryEntry = {
       id: `d-${Date.now()}`,
-      date: dateInput?.value || ctx.date.toISOString().split('T')[0],
+      date: dateInput?.value || toLocalDateStr(ctx.date),
       time: timeInput?.value || '22:00',
       locationName: locInput?.value || ctx.location.name,
       text: textInput.value.trim(),

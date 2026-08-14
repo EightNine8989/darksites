@@ -139,9 +139,27 @@ function renderRoute(route: PageRoute) {
 }
 
 // ===== Modal System =====
+/** 本地时区的 YYYY-MM-DD（避免 toISOString 的 UTC 偏移导致日期差一天） */
+function toLocalDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 function openModal(id: string) {
   const modal = document.getElementById(id);
-  if (modal) modal.classList.add('show');
+  if (!modal) return;
+  // Date modal: rebuild calendar to current context before showing
+  if (id === 'dateModal') {
+    dateModalState.selectedDate = new Date(ctx.date.getTime());
+    dateModalState.selectedTime = ctx.startTime;
+    dateModalState.viewYear = ctx.date.getFullYear();
+    dateModalState.viewMonth = ctx.date.getMonth();
+    dateModalState.planningMode = ctx.planningMode;
+    renderDateModalContent();
+  }
+  modal.classList.add('show');
 }
 
 function closeModal(id: string) {
@@ -165,53 +183,229 @@ function toast(msg: string) {
 (window as any).toast = toast;
 (window as any).switchToProfile = () => switchTab('profile');
 
-// ===== Date Modal =====
+// ===== Date Modal (custom calendar — no native input) =====
+const isZhCtx = () => (ctx.language || 'zh') === 'zh';
+
+const dateModalState = {
+  selectedDate: new Date(ctx.date.getTime()),
+  selectedTime: ctx.startTime,
+  viewYear: ctx.date.getFullYear(),
+  viewMonth: ctx.date.getMonth(),
+  planningMode: ctx.planningMode,
+};
+
+const WEEK_ZH = ['一', '二', '三', '四', '五', '六', '日'];
+const WEEK_EN = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const MONTH_ZH = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
+const MONTH_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+const TIME_PRESETS = ['19:00', '20:00', '21:00', '22:00', '23:00', '00:00'];
+
 function createDateModal(): string {
-  const today = ctx.date.toISOString().split('T')[0];
   return `
   <div id="dateModal" class="modal">
-    <div class="sheet">
+    <div class="sheet" style="padding-bottom:24px">
       <div class="handle"></div>
       <div class="row">
         <div><div class="page-sub">${t('general.obsTime')}</div><h2>${t('general.dateAndTime')}</h2></div>
-        <button class="back-btn" onclick="document.getElementById('dateModal').classList.remove('show')">✕</button>
+        <button class="back-btn" id="dateModalClose">✕</button>
       </div>
-      <div class="field"><label>${ctx.language === 'zh' ? '日期' : 'Date'}</label><input id="dateInput" type="date" value="${today}"></div>
-      <div class="field"><label>${ctx.language === 'zh' ? '开始时间' : 'Start time'}</label><input id="timeInput" type="time" value="${ctx.startTime}"></div>
-      <div class="segment" id="planMode">
-        <button class="seg active" data-mode="single">${t('general.singleNight')}</button>
-        <button class="seg" data-mode="weekend">${t('general.weekend')}</button>
-        <button class="seg" data-mode="month">${t('general.anyMonth')}</button>
-      </div>
-      <button class="primary-btn" id="applyDate">${t('general.apply')}</button>
+      <div id="dateModalContent"></div>
     </div>
   </div>`;
 }
 
-function initDateModal() {
+function renderDateModalContent(): void {
+  const container = document.getElementById('dateModalContent');
+  if (!container) return;
+  container.innerHTML = `
+    ${renderCalendarGrid()}
+    ${renderTimePresets()}
+    ${renderPlanningMode()}
+    <button class="primary-btn" id="applyDate" style="margin-top:14px">${t('general.apply')}</button>
+  `;
+  bindCalendarEvents();
+}
+
+function renderCalendarGrid(): string {
+  const zh = isZhCtx();
+  const { viewYear, viewMonth, selectedDate } = dateModalState;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // First day of month; shift so Monday = 0
+  const firstDay = new Date(viewYear, viewMonth, 1);
+  let startWeekday = firstDay.getDay() - 1; // JS: 0=Sun → shift to Mon=0
+  if (startWeekday < 0) startWeekday = 6; // Sunday → 6
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+
+  // Prev month tail
+  const prevDays = new Date(viewYear, viewMonth, 0).getDate();
+  const cells: { day: number; date: Date; current: boolean }[] = [];
+  for (let i = startWeekday - 1; i >= 0; i--) {
+    cells.push({ day: prevDays - i, date: new Date(viewYear, viewMonth - 1, prevDays - i), current: false });
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    cells.push({ day: d, date: new Date(viewYear, viewMonth, d), current: true });
+  }
+  while (cells.length % 7 !== 0 || cells.length < 42) {
+    const last = cells[cells.length - 1].date;
+    const next = new Date(last);
+    next.setDate(next.getDate() + 1);
+    cells.push({ day: next.getDate(), date: next, current: false });
+    if (cells.length >= 42) break;
+  }
+
+  const weekLabels = zh ? WEEK_ZH : WEEK_EN;
+  const monthLabel = zh
+    ? `${viewYear}年 ${MONTH_ZH[viewMonth]}`
+    : `${MONTH_EN[viewMonth]} ${viewYear}`;
+
+  const selDateStr = toLocalDateStr(selectedDate);
+  const todayStr = toLocalDateStr(today);
+
+  const cellsHtml = cells.map(c => {
+    const dateStr = toLocalDateStr(c.date);
+    const isToday = dateStr === todayStr;
+    const isSelected = dateStr === selDateStr;
+    const classes = ['dp-day'];
+    if (!c.current) classes.push('other-month');
+    if (isToday) classes.push('today');
+    if (isSelected) classes.push('selected');
+    return `<button class="${classes.join(' ')}" data-date="${dateStr}">${c.day}</button>`;
+  }).join('');
+
+  return `
+    <div class="dp-nav">
+      <button class="dp-arrow" id="dpPrevMonth">‹</button>
+      <span class="dp-month-label">${monthLabel}</span>
+      <button class="dp-arrow" id="dpNextMonth">›</button>
+    </div>
+    <div class="dp-weekrow">${weekLabels.map(w => `<div class="dp-weekday">${w}</div>`).join('')}</div>
+    <div class="dp-grid">${cellsHtml}</div>
+  `;
+}
+
+function renderTimePresets(): string {
+  const zh = isZhCtx();
+  const { selectedTime } = dateModalState;
+  return `
+    <div class="dp-section-label">${zh ? '开始时间' : 'Start time'}</div>
+    <div class="dp-time-row">
+      ${TIME_PRESETS.map(tm => `
+        <button class="dp-time-chip ${tm === selectedTime ? 'active' : ''}" data-time="${tm}">${tm}</button>
+      `).join('')}
+    </div>
+    <div class="dp-time-custom">
+      <input id="dpCustomTime" type="text" inputmode="numeric" placeholder="${zh ? '或自定义 HH:MM' : 'Or custom HH:MM'}" value="${selectedTime}" maxlength="5" />
+    </div>
+  `;
+}
+
+function renderPlanningMode(): string {
+  const modes = [
+    { key: 'single', label: t('general.singleNight') },
+    { key: 'weekend', label: t('general.weekend') },
+    { key: 'month', label: t('general.anyMonth') },
+  ];
+  return `
+    <div class="dp-section-label" style="margin-top:14px">${t('general.dateAndTime')}</div>
+    <div class="segment" id="planMode">
+      ${modes.map(m => `<button class="seg ${dateModalState.planningMode === m.key ? 'active' : ''}" data-mode="${m.key}">${m.label}</button>`).join('')}
+    </div>
+  `;
+}
+
+function bindCalendarEvents(): void {
+  const container = document.getElementById('dateModalContent');
+  // Close button
+  document.getElementById('dateModalClose')?.addEventListener('click', () => closeModal('dateModal'));
+
+  // Prev / next month
+  document.getElementById('dpPrevMonth')?.addEventListener('click', () => {
+    dateModalState.viewMonth--;
+    if (dateModalState.viewMonth < 0) { dateModalState.viewMonth = 11; dateModalState.viewYear--; }
+    renderDateModalContent();
+  });
+  document.getElementById('dpNextMonth')?.addEventListener('click', () => {
+    dateModalState.viewMonth++;
+    if (dateModalState.viewMonth > 11) { dateModalState.viewMonth = 0; dateModalState.viewYear++; }
+    renderDateModalContent();
+  });
+
+  // Day click
+  container?.querySelectorAll('.dp-day').forEach(el => {
+    el.addEventListener('click', () => {
+      const dateStr = (el as HTMLElement).dataset.date!;
+      dateModalState.selectedDate = new Date(dateStr + 'T00:00:00');
+      // Jump view to selected month if user clicked a grey-out day
+      dateModalState.viewYear = dateModalState.selectedDate.getFullYear();
+      dateModalState.viewMonth = dateModalState.selectedDate.getMonth();
+      renderDateModalContent();
+    });
+  });
+
+  // Time preset chips
+  container?.querySelectorAll('.dp-time-chip').forEach(el => {
+    el.addEventListener('click', () => {
+      dateModalState.selectedTime = (el as HTMLElement).dataset.time!;
+      // Clear custom input
+      const customInput = document.getElementById('dpCustomTime') as HTMLInputElement | null;
+      if (customInput) customInput.value = dateModalState.selectedTime;
+      renderDateModalContent();
+    });
+  });
+
+  // Custom time input
+  const customInput = document.getElementById('dpCustomTime') as HTMLInputElement | null;
+  customInput?.addEventListener('input', (e) => {
+    const val = (e.target as HTMLInputElement).value;
+    // Auto-format: insert colon after 2 digits
+    let formatted = val.replace(/[^\d:]/g, '');
+    if (formatted.length === 2 && !formatted.includes(':')) formatted += ':';
+    if (formatted.length > 5) formatted = formatted.slice(0, 5);
+    (e.target as HTMLInputElement).value = formatted;
+    // Validate HH:MM
+    const m = formatted.match(/^(\d{1,2}):(\d{2})$/);
+    if (m) {
+      const hh = parseInt(m[1], 10);
+      const mm = parseInt(m[2], 10);
+      if (hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59) {
+        dateModalState.selectedTime = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+        // Update chip highlights without full re-render
+        container?.querySelectorAll('.dp-time-chip').forEach(c => {
+          c.classList.toggle('active', (c as HTMLElement).dataset.time === dateModalState.selectedTime);
+        });
+      }
+    }
+  });
+
+  // Planning mode
   document.getElementById('planMode')?.addEventListener('click', (e) => {
     const seg = (e.target as HTMLElement).closest('.seg') as HTMLElement;
     if (!seg) return;
-    document.querySelectorAll('#planMode .seg').forEach(s => s.classList.remove('active'));
+    dateModalState.planningMode = seg.dataset.mode as any;
+    container?.querySelectorAll('#planMode .seg').forEach(s => s.classList.remove('active'));
     seg.classList.add('active');
-    updateContext({ planningMode: seg.dataset.mode as any });
   });
 
+  // Apply button
   document.getElementById('applyDate')?.addEventListener('click', () => {
-    const dateInput = document.getElementById('dateInput') as HTMLInputElement;
-    const timeInput = document.getElementById('timeInput') as HTMLInputElement;
-    if (dateInput?.value) {
-      updateContext({ date: new Date(dateInput.value + 'T00:00:00'), startTime: timeInput?.value || '22:00' });
-      persistContext();
-    }
+    updateContext({
+      date: new Date(dateModalState.selectedDate.getTime()),
+      startTime: dateModalState.selectedTime,
+      planningMode: dateModalState.planningMode,
+    });
+    persistContext();
     closeModal('dateModal');
     toast(t('general.dateApplied'));
   });
-
-  document.getElementById('dateModal')?.addEventListener('click', (e) => {
-    if (e.target === document.getElementById('dateModal')) closeModal('dateModal');
-  });
 }
+
+// Backdrop click to close
+document.addEventListener('click', (e) => {
+  if ((e.target as HTMLElement).id === 'dateModal') closeModal('dateModal');
+});
 
 // ===== Equipment Modal =====
 function createEquipmentModal(): string {
@@ -437,7 +631,6 @@ async function init() {
     app.insertAdjacentHTML('beforeend', createEquipmentModal());
     app.insertAdjacentHTML('beforeend', createContributionModal());
   }
-  initDateModal();
   initEquipmentModal();
   initContributionModal();
 

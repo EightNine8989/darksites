@@ -37,6 +37,9 @@ let overallWeatherScore = 0;
 let moonPhaseName = '';
 let bestWindow = '';
 
+// ===== Context listener (unregistered on re-init to avoid duplicates) =====
+let unsubObjectsContext: (() => void) | null = null;
+
 // ===== Season data (simplified visibility per month) =====
 const SEASON_DATA: Record<string, number[]> = {
   // 12 months, 0=Jan, value 0-4 = visibility quality
@@ -142,13 +145,29 @@ export function initObjectsPage(): void {
     renderObjectList();
   });
 
-  // Context change
-  onContextChange(() => {
+  // Context change (date/time/equipment) → update date bar + recalc
+  if (unsubObjectsContext) unsubObjectsContext();
+  unsubObjectsContext = onContextChange(() => {
+    updateObjectsDateBar();
     recalculateObjects();
   });
 
   // Initial calculation
   recalculateObjects();
+}
+
+/** Update the date bar label (date + time + equipment) without full re-render */
+function updateObjectsDateBar(): void {
+  const dateBtn = document.getElementById('objectsDateBtn');
+  if (dateBtn) {
+    const strong = dateBtn.querySelector('strong');
+    if (strong) strong.textContent = `${formatDateShort()} · ${ctx.startTime}`;
+  }
+  const equipBtn = document.getElementById('objectsEquipBtn');
+  if (equipBtn) {
+    const strong = equipBtn.querySelector('strong');
+    if (strong) strong.textContent = equipmentSummary();
+  }
 }
 
 // ===== Computation =====
