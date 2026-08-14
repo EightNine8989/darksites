@@ -279,23 +279,38 @@ function loadObjectWeather() {
   const isZh = (ctx.language || 'zh') === 'zh';
 
   fetchHourlyWeather(loc).then(weatherData => {
-    if (!weatherData) return;
+    if (!weatherData) {
+      showObjWeatherUnavailable(isZh);
+      return;
+    }
 
     const [hh, mm] = ctx.startTime.split(':').map(Number);
     const baseDate = new Date(ctx.date);
     baseDate.setHours(hh || 22, mm || 0, 0, 0);
     const targetDate = new Date(baseDate.getTime());
 
+    // Out of the 15-day forecast window → hide the section
+    const now = Date.now();
+    const maxTime = now + 15 * 24 * 3600_000;
+    if (targetDate.getTime() < now - 3600_000 || targetDate.getTime() > maxTime) {
+      hideObjWeatherGrid(isZh);
+      return;
+    }
+
     const moonInfo = computeMoonPhase(targetDate, loc);
 
     const targetHour = targetDate.getTime();
-    let bestIdx = 0;
+    let bestIdx = -1;
     let bestDiff = Infinity;
     weatherData.forEach((h: any, i: number) => {
       const diff = Math.abs(new Date(h.time).getTime() - targetHour);
       if (diff < bestDiff) { bestDiff = diff; bestIdx = i; }
     });
-    const hw = weatherData[bestIdx];
+    const hw = bestIdx >= 0 ? weatherData[bestIdx] : undefined;
+    if (!hw) {
+      showObjWeatherUnavailable(isZh);
+      return;
+    }
     if (hw) {
       const setVal = (id: string, v: string) => {
         const el = document.getElementById(id);
@@ -318,5 +333,20 @@ function loadObjectWeather() {
       const moonPct = Math.round(moonInfo.illumination * 100);
       setVal('objMoonLight', `${moonPct}%`);
     }
-  }).catch(() => {});
+  }).catch(() => {
+    showObjWeatherUnavailable(isZh);
+  });
+}
+
+// ===== Weather fallback helpers =====
+function hideObjWeatherGrid(isZh: boolean): void {
+  const grid = document.getElementById('objWeatherGrid');
+  if (!grid) return;
+  grid.innerHTML = `<div class="fact" style="grid-column:1/-1"><div class="label"></div><div class="value">${isZh ? '所选日期超出15天预报范围，暂无天气数据' : 'No weather data for dates beyond the 15-day forecast'}</div></div>`;
+}
+
+function showObjWeatherUnavailable(isZh: boolean): void {
+  const grid = document.getElementById('objWeatherGrid');
+  if (!grid) return;
+  grid.innerHTML = `<div class="fact" style="grid-column:1/-1"><div class="label"></div><div class="value">${isZh ? '暂无天气数据' : 'No weather data'}</div></div>`;
 }

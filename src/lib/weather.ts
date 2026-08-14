@@ -33,7 +33,7 @@ export async function fetchHourlyWeather(location: GeoCoord): Promise<HourlyWeat
   const params = new URLSearchParams({
     latitude: location.lat.toString(), longitude: location.lon.toString(),
     hourly: 'cloud_cover,wind_speed_10m,visibility,temperature_2m,relative_humidity_2m',
-    timezone: 'auto', wind_speed_unit: 'kmh', forecast_days: '3'
+    timezone: 'auto', wind_speed_unit: 'kmh', forecast_days: '16'
   });
   try {
     const resp = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
