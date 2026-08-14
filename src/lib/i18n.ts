@@ -216,7 +216,7 @@ const translations: Record<string, Record<Lang, string>> = {
   // === Observe Page ===
   'observe.sub':            { zh: '你的观测记录', en: 'Your observation log' },
   'observe.title':          { zh: '记录', en: 'Journal' },
-  'observe.tipsTitle':      { zh: '今晚贴士', en: 'Tips for tonight' },
+  'observe.tipsTitle':      { zh: '观测贴士', en: 'Observing tips' },
   'observe.tipsDesc':       { zh: '根据你的位置、目标和设备生成的个性化建议。', en: 'Personalized advice based on your location, target and equipment.' },
   'observe.journal':        { zh: '观测日记', en: 'Observation journal' },
   'observe.newEntry':       { zh: '＋ 新建', en: '+ New' },

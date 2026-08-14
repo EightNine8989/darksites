@@ -1,7 +1,7 @@
 // ===== Objects 页面 =====
 // "我想看某个天体，怎么看、去哪里看"
 import type { CelestialObject, CelestialPosition, CelestialCategory, EquipmentType } from '../types';
-import { ctx, onContextChange, formatDateShort, equipmentSummary } from '../lib/context';
+import { ctx, onContextChange } from '../lib/context';
 import { celestialCatalog } from '../lib/catalog';
 import { computePosition, computeMoonPhase, computeSunInfo } from '../lib/astronomy';
 import { fetchHourlyWeather, computeHourlyScore, findBestWindow } from '../lib/weather';
@@ -73,17 +73,6 @@ export function renderObjectsPage(): string {
       <button class="icon-btn" id="objectsSortBtn">⇅</button>
     </div>
 
-    <div class="date-bar">
-      <button class="date-btn" id="objectsDateBtn">
-        <strong>${formatDateShort()} · ${ctx.startTime}</strong>
-        <span>${t('general.obsTime')}</span>
-      </button>
-      <button class="date-btn" id="objectsEquipBtn">
-        <strong>${equipmentSummary()}</strong>
-        <span>${t('sites.yourEquip')}</span>
-      </button>
-    </div>
-
     <div class="hero-card">
       <h2>${t('objects.heroTitle')}</h2>
       <p>${t('objects.heroDesc')}</p>
@@ -130,14 +119,6 @@ export function initObjectsPage(): void {
     renderObjectList();
   });
 
-  // Date / Equipment buttons
-  document.getElementById('objectsDateBtn')?.addEventListener('click', () => {
-    (window as any).openModal?.('dateModal');
-  });
-  document.getElementById('objectsEquipBtn')?.addEventListener('click', () => {
-    (window as any).openModal?.('equipmentModal');
-  });
-
   // Search
   const searchInput = document.getElementById('objectsSearch') as HTMLInputElement;
   searchInput?.addEventListener('input', (e) => {
@@ -148,26 +129,11 @@ export function initObjectsPage(): void {
   // Context change (date/time/equipment) → update date bar + recalc
   if (unsubObjectsContext) unsubObjectsContext();
   unsubObjectsContext = onContextChange(() => {
-    updateObjectsDateBar();
     recalculateObjects();
   });
 
   // Initial calculation
   recalculateObjects();
-}
-
-/** Update the date bar label (date + time + equipment) without full re-render */
-function updateObjectsDateBar(): void {
-  const dateBtn = document.getElementById('objectsDateBtn');
-  if (dateBtn) {
-    const strong = dateBtn.querySelector('strong');
-    if (strong) strong.textContent = `${formatDateShort()} · ${ctx.startTime}`;
-  }
-  const equipBtn = document.getElementById('objectsEquipBtn');
-  if (equipBtn) {
-    const strong = equipBtn.querySelector('strong');
-    if (strong) strong.textContent = equipmentSummary();
-  }
 }
 
 // ===== Computation =====

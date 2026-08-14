@@ -199,7 +199,12 @@ const WEEK_EN = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const MONTH_ZH = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
 const MONTH_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-const TIME_PRESETS = ['19:00', '20:00', '21:00', '22:00', '23:00', '00:00'];
+const TIME_OPTIONS: string[] = (() => {
+  const opts: string[] = [];
+  for (let h = 18; h <= 23; h++) { opts.push(`${String(h).padStart(2,'0')}:00`); opts.push(`${String(h).padStart(2,'0')}:30`); }
+  for (let h = 0; h <= 5; h++) { opts.push(`${String(h).padStart(2,'0')}:00`); if (h < 5) opts.push(`${String(h).padStart(2,'0')}:30`); }
+  return opts;
+})();
 
 function createDateModal(): string {
   return `
@@ -220,8 +225,7 @@ function renderDateModalContent(): void {
   if (!container) return;
   container.innerHTML = `
     ${renderCalendarGrid()}
-    ${renderTimePresets()}
-    ${renderPlanningMode()}
+    ${renderTimeSelect()}
     <button class="primary-btn" id="applyDate" style="margin-top:14px">${t('general.apply')}</button>
   `;
   bindCalendarEvents();
@@ -286,33 +290,14 @@ function renderCalendarGrid(): string {
   `;
 }
 
-function renderTimePresets(): string {
+function renderTimeSelect(): string {
   const zh = isZhCtx();
   const { selectedTime } = dateModalState;
   return `
-    <div class="dp-section-label">${zh ? '开始时间' : 'Start time'}</div>
-    <div class="dp-time-row">
-      ${TIME_PRESETS.map(tm => `
-        <button class="dp-time-chip ${tm === selectedTime ? 'active' : ''}" data-time="${tm}">${tm}</button>
-      `).join('')}
-    </div>
-    <div class="dp-time-custom">
-      <input id="dpCustomTime" type="text" inputmode="numeric" placeholder="${zh ? '或自定义 HH:MM' : 'Or custom HH:MM'}" value="${selectedTime}" maxlength="5" />
-    </div>
-  `;
-}
-
-function renderPlanningMode(): string {
-  const modes = [
-    { key: 'single', label: t('general.singleNight') },
-    { key: 'weekend', label: t('general.weekend') },
-    { key: 'month', label: t('general.anyMonth') },
-  ];
-  return `
-    <div class="dp-section-label" style="margin-top:14px">${t('general.dateAndTime')}</div>
-    <div class="segment" id="planMode">
-      ${modes.map(m => `<button class="seg ${dateModalState.planningMode === m.key ? 'active' : ''}" data-mode="${m.key}">${m.label}</button>`).join('')}
-    </div>
+    <div class="dp-section-label">${zh ? '时间' : 'Time'}</div>
+    <select id="dpTimeSelect" class="dp-time-select">
+      ${TIME_OPTIONS.map(tm => `<option value="${tm}" ${tm === selectedTime ? 'selected' : ''}>${tm}</option>`).join('')}
+    </select>
   `;
 }
 
@@ -345,48 +330,10 @@ function bindCalendarEvents(): void {
     });
   });
 
-  // Time preset chips
-  container?.querySelectorAll('.dp-time-chip').forEach(el => {
-    el.addEventListener('click', () => {
-      dateModalState.selectedTime = (el as HTMLElement).dataset.time!;
-      // Clear custom input
-      const customInput = document.getElementById('dpCustomTime') as HTMLInputElement | null;
-      if (customInput) customInput.value = dateModalState.selectedTime;
-      renderDateModalContent();
-    });
-  });
-
-  // Custom time input
-  const customInput = document.getElementById('dpCustomTime') as HTMLInputElement | null;
-  customInput?.addEventListener('input', (e) => {
-    const val = (e.target as HTMLInputElement).value;
-    // Auto-format: insert colon after 2 digits
-    let formatted = val.replace(/[^\d:]/g, '');
-    if (formatted.length === 2 && !formatted.includes(':')) formatted += ':';
-    if (formatted.length > 5) formatted = formatted.slice(0, 5);
-    (e.target as HTMLInputElement).value = formatted;
-    // Validate HH:MM
-    const m = formatted.match(/^(\d{1,2}):(\d{2})$/);
-    if (m) {
-      const hh = parseInt(m[1], 10);
-      const mm = parseInt(m[2], 10);
-      if (hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59) {
-        dateModalState.selectedTime = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
-        // Update chip highlights without full re-render
-        container?.querySelectorAll('.dp-time-chip').forEach(c => {
-          c.classList.toggle('active', (c as HTMLElement).dataset.time === dateModalState.selectedTime);
-        });
-      }
-    }
-  });
-
-  // Planning mode
-  document.getElementById('planMode')?.addEventListener('click', (e) => {
-    const seg = (e.target as HTMLElement).closest('.seg') as HTMLElement;
-    if (!seg) return;
-    dateModalState.planningMode = seg.dataset.mode as any;
-    container?.querySelectorAll('#planMode .seg').forEach(s => s.classList.remove('active'));
-    seg.classList.add('active');
+  // Time select dropdown
+  const timeSelect = document.getElementById('dpTimeSelect') as HTMLSelectElement | null;
+  timeSelect?.addEventListener('change', (e) => {
+    dateModalState.selectedTime = (e.target as HTMLSelectElement).value;
   });
 
   // Apply button
@@ -394,7 +341,6 @@ function bindCalendarEvents(): void {
     updateContext({
       date: new Date(dateModalState.selectedDate.getTime()),
       startTime: dateModalState.selectedTime,
-      planningMode: dateModalState.planningMode,
     });
     persistContext();
     closeModal('dateModal');

@@ -1,9 +1,9 @@
 // ===== 天体详情页 =====
 // "我想看这个天体，怎么看、去哪里看"
-import type { CelestialObject, CelestialPosition } from '../types';
+import type { CelestialObject } from '../types';
 import { ctx, onContextChange, formatDateShort } from '../lib/context';
 import { celestialCatalog } from '../lib/catalog';
-import { computePosition, computeMoonPhase, computeSunInfo } from '../lib/astronomy';
+import { computeMoonPhase } from '../lib/astronomy';
 import { fetchHourlyWeather } from '../lib/weather';
 import { DARK_SKY_PLACES } from '../lib/dark-sky-places';
 import { t, tCat } from '../lib/i18n';
@@ -25,9 +25,6 @@ function toggleFavorite(id: string): boolean {
   if (idx >= 0) { favs.splice(idx, 1); saveFavorites(favs); return false; }
   favs.push(id); saveFavorites(favs); return true;
 }
-
-// ===== Weather tab state =====
-let weatherNight: 'tonight' | 'tomorrow' = 'tonight';
 
 // ===== Context listener (unregistered on re-init to avoid duplicates) =====
 let unsubContext: (() => void) | null = null;
@@ -103,12 +100,7 @@ export function renderObjectDetailPage(objectId: string): string {
   if (!obj) return '<div class="card"><div class="meta" style="text-align:center;padding:40px 0">' + (ctx.language === 'zh' ? '天体未找到' : 'Object not found') + '</div></div>';
 
   const loc = { lat: ctx.location.lat, lon: ctx.location.lon };
-  const [hh, mm] = ctx.startTime.split(':').map(Number);
-  const obsDate = new Date(ctx.date);
-  obsDate.setHours(hh || 22, mm || 0, 0, 0);
 
-  const pos = computePosition(obj, loc, obsDate);
-  const moonInfo = computeMoonPhase(obsDate, loc);
   const seasonData = SEASON_DATA[obj.id] || Array(12).fill(2);
   const currentMonth = new Date().getMonth();
   const favState = isFavorite(obj.id);
@@ -148,17 +140,6 @@ export function renderObjectDetailPage(objectId: string): string {
     .sort((a, b) => a.distKm - b.distKm)
     .slice(0, 3);
 
-  // Moon conflict
-  const moonConflict = moonInfo.altitude > 0 && moonInfo.illumination > 0.5
-    ? `Moon in sky (${moonInfo.phaseName}, ${Math.round(moonInfo.illumination * 100)}%)`
-    : 'No moon interference';
-
-  // Visibility score
-  const visible = pos.visible && pos.altitude > 0;
-  const visScore = visible ? Math.round(Math.min(100, pos.altitude * 1.2 + (obj.magnitude < 0 ? 40 : obj.magnitude < 2 ? 25 : 10))) : 0;
-  const scoreCls = visScore >= 70 ? 'great' : visScore >= 40 ? 'ok' : visScore >= 20 ? 'meh' : 'bad';
-  const visLabel = visScore >= 70 ? t('vis.excellent') : visScore >= 40 ? t('vis.good') : visScore >= 20 ? t('vis.fair') : t('vis.poor');
-
   return `
     <div class="page-top">
       <button class="back-btn" id="objDetailBack">‹</button>
@@ -183,42 +164,8 @@ export function renderObjectDetailPage(objectId: string): string {
       <div class="meta" style="margin-top:8px">${seasonText ? seasonText + ' · ' : ''}${ctx.language === 'zh' ? '在此纬度，' : 'For this latitude, '}${tCat(obj.id, 'name') || obj.name} ${seasonData[currentMonth] >= 3 ? t('objDetail.wellPlaced') : t('objDetail.lowTonight')}</div>
     </div>
 
-    <!-- Visibility tonight -->
-    <div class="section"><h3>${t('objDetail.visTonight')}</h3><span class="page-sub">${t('objDetail.timeSensitive')}</span></div>
-    <div class="grid-2">
-      <div class="fact">
-        <div class="label">${t('objDetail.direction')}</div>
-        <div class="value">${visible ? pos.directionText : '—'}</div>
-      </div>
-      <div class="fact">
-        <div class="label">${t('objDetail.altitude')}</div>
-        <div class="value">${visible ? `${pos.altitude.toFixed(0)}°` : (ctx.language === 'zh' ? '地平线下' : 'Below horizon')}</div>
-      </div>
-      <div class="fact">
-        <div class="label">${t('objDetail.bestTime')}</div>
-        <div class="value">${pos.bestTime}</div>
-      </div>
-      <div class="fact">
-        <div class="label">${t('objDetail.moonConflict')}</div>
-        <div class="value" style="${moonInfo.altitude > 0 && moonInfo.illumination > 0.5 ? 'color:var(--warn)' : 'color:var(--good)'}">${moonInfo.altitude > 0 && moonInfo.illumination > 0.5 ? (ctx.language === 'zh' ? `月空 (${moonInfo.phaseName}, ${Math.round(moonInfo.illumination * 100)}%)` : `Moon in sky (${moonInfo.phaseName}, ${Math.round(moonInfo.illumination * 100)}%)`) : t('objDetail.noMoonInterf')}</div>
-      </div>
-    </div>
-
-    ${visible ? `
-    <div style="margin:12px 0;text-align:center">
-      <div class="score ${scoreCls}" style="width:64px;height:64px;font-size:28px;border-radius:20px;margin:0 auto">${visScore}</div>
-      <div style="margin-top:6px;font-size:13px;color:var(--muted)">${visLabel} ${ctx.language === 'zh' ? '可见度' : 'visibility'}</div>
-    </div>` : `
-    <div class="card"><div class="meta" style="text-align:center;padding:12px 0;color:var(--warn)">
-      ${tCat(obj.id, 'name') || obj.name} ${t('objDetail.belowHorizon')}
-    </div></div>`}
-
-    <!-- Weather conditions (6 metrics) with tonight/tomorrow toggle -->
+    <!-- Weather conditions (6 metrics for selected date) -->
     <div class="section"><h3>${t('placeDetail.forecast')}</h3></div>
-    <div class="segment" id="objNightSeg" style="margin:0 0 12px">
-      <button class="seg active" data-night="tonight">${t('placeDetail.tonight')}</button>
-      <button class="seg" data-night="tomorrow">${t('placeDetail.tomorrow')}</button>
-    </div>
     <div class="grid-2" id="objWeatherGrid">
       <div class="fact">
         <div class="label">${t('placeDetail.temp')}</div>
@@ -304,16 +251,6 @@ export function initObjectDetailPage(): void {
     }
   });
 
-  // Tonight / Tomorrow weather toggle
-  document.getElementById('objNightSeg')?.addEventListener('click', (e) => {
-    const seg = (e.target as HTMLElement).closest('.seg') as HTMLElement;
-    if (!seg) return;
-    weatherNight = (seg.dataset.night as 'tonight' | 'tomorrow') || 'tonight';
-    document.querySelectorAll('#objNightSeg .seg').forEach(s => s.classList.remove('active'));
-    seg.classList.add('active');
-    loadObjectWeather();
-  });
-
   // Fetch weather for condition cards
   loadObjectWeather();
 
@@ -348,7 +285,6 @@ function loadObjectWeather() {
     const baseDate = new Date(ctx.date);
     baseDate.setHours(hh || 22, mm || 0, 0, 0);
     const targetDate = new Date(baseDate.getTime());
-    if (weatherNight === 'tomorrow') targetDate.setDate(targetDate.getDate() + 1);
 
     const moonInfo = computeMoonPhase(targetDate, loc);
 

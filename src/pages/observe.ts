@@ -1,5 +1,5 @@
 // ===== Observe Page — 观测贴士 + 观测日记 + 日历打卡 =====
-import { ctx, onContextChange, formatDateShort, equipmentSummary } from '../lib/context';
+import { ctx, onContextChange, equipmentSummary } from '../lib/context';
 import { t } from '../lib/i18n';
 import { computeMoonPhase, computeSunInfo } from '../lib/astronomy';
 import type { DiaryEntry, CalendarEvent } from '../types';
@@ -332,9 +332,6 @@ function renderNewDiaryModal(): string {
 
 // ===== Main Render =====
 export function renderObservePage(): string {
-  const dateStr = formatDateShort();
-  const equipStr = equipmentSummary();
-
   return `
   <div class="page-top">
     <div>
@@ -343,25 +340,6 @@ export function renderObservePage(): string {
     </div>
     <button class="icon-btn" onclick="window.openModal('equipmentModal')">⚙︎</button>
   </div>
-
-  <!-- Context bar -->
-  <div class="date-bar">
-    <button class="date-btn" onclick="window.openModal('dateModal')">
-      <strong>${dateStr} · ${ctx.startTime}</strong>
-      <span>${(ctx.language || 'zh') === 'zh' ? '观测日期' : 'Observation date'}</span>
-    </button>
-    <button class="date-btn" onclick="window.openModal('equipmentModal')">
-      <strong>${equipStr}</strong>
-      <span>${(ctx.language || 'zh') === 'zh' ? '当前设备' : 'Current equipment'}</span>
-    </button>
-  </div>
-
-  <!-- Tips -->
-  <div class="hero-card">
-    <h2>${t('observe.tipsTitle')}</h2>
-    <p>${t('observe.tipsDesc')}</p>
-  </div>
-  ${renderTips()}
 
   <!-- Journal -->
   <div class="section">
@@ -372,6 +350,13 @@ export function renderObservePage(): string {
 
   <!-- Calendar -->
   ${renderCalendar()}
+
+  <!-- Tips (at bottom) -->
+  <div class="hero-card">
+    <h2>${t('observe.tipsTitle')}</h2>
+    <p>${t('observe.tipsDesc')}</p>
+  </div>
+  ${renderTips()}
 
   <!-- New Diary Modal -->
   ${renderNewDiaryModal()}

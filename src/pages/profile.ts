@@ -1,70 +1,15 @@
 // ===== Profile 页面 =====
 // "我的设备、观测记录、贡献者权益"
-import type { EquipmentItem, ObservationRecord } from '../types';
+import type { EquipmentItem } from '../types';
 import { ctx, persistContext, onContextChange } from '../lib/context';
 import { t, tCat } from '../lib/i18n';
 import { loadContributions, getContributionStats, type ContributionRecord } from '../lib/contribution';
 
 // ===== State =====
-let profileTab: 'equipment' | 'records' | 'contributions' = 'equipment';
-
-// ===== Sample observation records =====
-const SAMPLE_RECORDS: ObservationRecord[] = [
-  {
-    id: 'rec-1', date: '2026-08-05', startTime: '22:30', endTime: '01:15',
-    locationName: '西涌暗夜社区', bortle: 4,
-    targets: [
-      { id: 'milkyway', name: '银河', type: 'milkyway', completedAt: '22:45' },
-      { id: 'saturn', name: '土星', type: 'planet', completedAt: '23:10' },
-    ],
-    notes: '银河核心清晰可见，海边条件不错',
-    weatherScore: 78, moonPhase: '新月',
-    createdAt: '2026-08-05T22:30:00'
-  },
-  {
-    id: 'rec-2', date: '2026-07-28', startTime: '21:00', endTime: '23:30',
-    locationName: '怀柔暗夜观测站', bortle: 4,
-    targets: [
-      { id: 'm31', name: '仙女座星系', type: 'deepSky' },
-      { id: 'vega', name: '织女星', type: 'star' },
-    ],
-    notes: '双筒镜找到仙女座星系，模糊光斑',
-    weatherScore: 65, moonPhase: '蛾眉月',
-    createdAt: '2026-07-28T21:00:00'
-  },
-  {
-    id: 'rec-3', date: '2026-07-12', startTime: '22:00', endTime: '00:30',
-    locationName: '太行洪谷', bortle: 2,
-    targets: [
-      { id: 'milkyway', name: '银河', type: 'milkyway' },
-      { id: 'perseids', name: '英仙座流星雨', type: 'meteor' },
-    ],
-    notes: '流星雨前哨夜，3小时内看到11颗',
-    weatherScore: 88, moonPhase: '下弦月',
-    createdAt: '2026-07-12T22:00:00'
-  },
-];
-
-// ===== Persistence for records =====
-const RECORDS_KEY = 'ds_observation_records';
-
-function loadRecords(): ObservationRecord[] {
-  try {
-    const stored = localStorage.getItem(RECORDS_KEY);
-    if (stored) return JSON.parse(stored);
-  } catch {}
-  return SAMPLE_RECORDS;
-}
-
-function saveRecords(records: ObservationRecord[]) {
-  try {
-    localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
-  } catch {}
-}
+let profileTab: 'equipment' | 'contributions' = 'equipment';
 
 // ===== Render =====
 export function renderProfilePage(): string {
-  const records = loadRecords();
   const contribStats = getContributionStats(loadContributions());
   const contributionLevel = contribStats.level === 'founder'
     ? (ctx.language === 'zh' ? '创始探索者' : 'Founding Explorer')
@@ -104,7 +49,6 @@ export function renderProfilePage(): string {
     <!-- Profile tabs -->
     <div class="chips" id="profileChips">
       <button class="chip ${profileTab === 'equipment' ? 'active' : ''}" data-ptab="equipment">${t('profile.equipment')}</button>
-      <button class="chip ${profileTab === 'records' ? 'active' : ''}" data-ptab="records">${t('profile.records')}</button>
       <button class="chip ${profileTab === 'contributions' ? 'active' : ''}" data-ptab="contributions">${t('profile.contributions')}</button>
     </div>
 
@@ -152,10 +96,6 @@ function renderProfileContent() {
     case 'equipment':
       container.innerHTML = renderEquipmentSection();
       initEquipmentSection();
-      break;
-    case 'records':
-      container.innerHTML = renderRecordsSection();
-      initRecordsSection();
       break;
     case 'contributions':
       container.innerHTML = renderContributionsSection();
@@ -275,59 +215,6 @@ function getEquipmentDetails(item: EquipmentItem): string {
     default:
       return isZh ? '观测设备' : 'Observation equipment';
   }
-}
-
-// ===== Records Section =====
-function renderRecordsSection(): string {
-  const records = loadRecords();
-  const totalVisits = records.length;
-  const totalTargets = records.reduce((sum, r) => sum + r.targets.length, 0);
-
-  return `
-    <div class="section"><h3>${t('profile.summary')}</h3><span class="page-sub">${t('profile.allTime')}</span></div>
-    <div class="grid-2" style="margin-bottom:12px">
-      <div class="fact">
-        <div class="label">${t('profile.totalSessions')}</div>
-        <div class="value">${totalVisits}</div>
-      </div>
-      <div class="fact">
-        <div class="label">${t('profile.targetsObserved')}</div>
-        <div class="value">${totalTargets}</div>
-      </div>
-    </div>
-
-    <div class="section"><h3>${t('profile.obsLog')}</h3></div>
-    ${records.length > 0 ? records.map(r => {
-      const targetBadges = r.targets.map(t2 => {
-        const typeInfo = typeToInfo(t2.type);
-        const name = ctx.language === 'en' ? (tCat(t2.id, 'name') || t2.name) : t2.name;
-        return `<span class="badge ${typeInfo.cls}">${name}</span>`;
-      }).join('');
-      return `
-        <div class="card clickable" data-record-id="${r.id}">
-          <div class="row">
-            <div>
-              <div class="place">${r.locationName}</div>
-              <div class="meta">${r.date} · ${r.startTime}–${r.endTime || '?'} · Bortle ${r.bortle}${r.weatherScore ? ` · ${ctx.language === 'zh' ? '天气' : 'Weather'} ${r.weatherScore}` : ''}</div>
-            </div>
-            <span style="color:var(--muted);font-size:18px">›</span>
-          </div>
-          <div class="badges">${targetBadges}</div>
-          ${r.notes ? `<div class="meta" style="margin-top:6px">${r.notes}</div>` : ''}
-        </div>`;
-    }).join('') : `
-      <div class="card"><div class="meta" style="text-align:center;padding:20px 0">
-        ${t('profile.noRecords')}
-      </div></div>`}
-  `;
-}
-
-function initRecordsSection() {
-  document.querySelectorAll('[data-record-id]').forEach(el => {
-    el.addEventListener('click', () => {
-      (window as any).toast?.(ctx.language === 'zh' ? '会话详情开发中' : 'Session detail coming soon');
-    });
-  });
 }
 
 // ===== Contributions Section =====
