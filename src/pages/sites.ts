@@ -74,7 +74,7 @@ export function renderSitesPage(): string {
 
     <div class="date-bar">
       <button class="date-btn" id="sitesDateBtn">
-        <strong>${dateLabel} · ${ctx.startTime}</strong>
+        <strong>${dateLabel}</strong>
         <span>${t('sites.changeDate')}</span>
       </button>
       <button class="date-btn" id="sitesEquipBtn">
@@ -404,7 +404,7 @@ function highlightSite(q: string) {
 function updateDateBar() {
   const dateBtn = document.getElementById('sitesDateBtn');
   const equipBtn = document.getElementById('sitesEquipBtn');
-  if (dateBtn) dateBtn.querySelector('strong')!.textContent = `${formatDateShort()} · ${ctx.startTime}`;
+  if (dateBtn) dateBtn.querySelector('strong')!.textContent = `${formatDateShort()}`;
   if (equipBtn) equipBtn.querySelector('strong')!.textContent = equipmentSummary();
   const nearbySub = document.getElementById('nearbyDateSub');
   if (nearbySub) nearbySub.textContent = `${t('sites.forDate')} ${formatDateShort()}${bestWindow ? ' · ' + bestWindow : ''}`;

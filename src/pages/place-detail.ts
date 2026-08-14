@@ -77,7 +77,7 @@ export function renderPlaceDetailPage(siteId: string): string {
 
     <div class="date-bar">
       <button class="date-btn" id="placeDetailDateBtn">
-        <strong>${formatDateShort()} · ${ctx.startTime}</strong>
+        <strong>${formatDateShort()}</strong>
         <span>${t('placeDetail.forecast')}</span>
       </button>
     </div>

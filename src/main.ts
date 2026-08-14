@@ -153,7 +153,6 @@ function openModal(id: string) {
   // Date modal: rebuild calendar to current context before showing
   if (id === 'dateModal') {
     dateModalState.selectedDate = new Date(ctx.date.getTime());
-    dateModalState.selectedTime = ctx.startTime;
     dateModalState.viewYear = ctx.date.getFullYear();
     dateModalState.viewMonth = ctx.date.getMonth();
     dateModalState.planningMode = ctx.planningMode;
@@ -188,7 +187,6 @@ const isZhCtx = () => (ctx.language || 'zh') === 'zh';
 
 const dateModalState = {
   selectedDate: new Date(ctx.date.getTime()),
-  selectedTime: ctx.startTime,
   viewYear: ctx.date.getFullYear(),
   viewMonth: ctx.date.getMonth(),
   planningMode: ctx.planningMode,
@@ -198,13 +196,6 @@ const WEEK_ZH = ['一', '二', '三', '四', '五', '六', '日'];
 const WEEK_EN = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const MONTH_ZH = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
 const MONTH_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-const TIME_OPTIONS: string[] = (() => {
-  const opts: string[] = [];
-  for (let h = 18; h <= 23; h++) { opts.push(`${String(h).padStart(2,'0')}:00`); opts.push(`${String(h).padStart(2,'0')}:30`); }
-  for (let h = 0; h <= 5; h++) { opts.push(`${String(h).padStart(2,'0')}:00`); if (h < 5) opts.push(`${String(h).padStart(2,'0')}:30`); }
-  return opts;
-})();
 
 function createDateModal(): string {
   return `
@@ -225,7 +216,6 @@ function renderDateModalContent(): void {
   if (!container) return;
   container.innerHTML = `
     ${renderCalendarGrid()}
-    ${renderTimeSelect()}
     <button class="primary-btn" id="applyDate" style="margin-top:14px">${t('general.apply')}</button>
   `;
   bindCalendarEvents();
@@ -290,17 +280,6 @@ function renderCalendarGrid(): string {
   `;
 }
 
-function renderTimeSelect(): string {
-  const zh = isZhCtx();
-  const { selectedTime } = dateModalState;
-  return `
-    <div class="dp-section-label">${zh ? '时间' : 'Time'}</div>
-    <select id="dpTimeSelect" class="dp-time-select">
-      ${TIME_OPTIONS.map(tm => `<option value="${tm}" ${tm === selectedTime ? 'selected' : ''}>${tm}</option>`).join('')}
-    </select>
-  `;
-}
-
 function bindCalendarEvents(): void {
   const container = document.getElementById('dateModalContent');
   // Close button
@@ -323,24 +302,26 @@ function bindCalendarEvents(): void {
     el.addEventListener('click', () => {
       const dateStr = (el as HTMLElement).dataset.date!;
       dateModalState.selectedDate = new Date(dateStr + 'T00:00:00');
-      // Jump view to selected month if user clicked a grey-out day
-      dateModalState.viewYear = dateModalState.selectedDate.getFullYear();
-      dateModalState.viewMonth = dateModalState.selectedDate.getMonth();
-      renderDateModalContent();
-    });
-  });
 
-  // Time select dropdown
-  const timeSelect = document.getElementById('dpTimeSelect') as HTMLSelectElement | null;
-  timeSelect?.addEventListener('change', (e) => {
-    dateModalState.selectedTime = (e.target as HTMLSelectElement).value;
+      // If clicked a grey-out (other-month) day, jump the calendar view to that month
+      const wasOtherMonth = (el as HTMLElement).classList.contains('other-month');
+      if (wasOtherMonth) {
+        dateModalState.viewYear = dateModalState.selectedDate.getFullYear();
+        dateModalState.viewMonth = dateModalState.selectedDate.getMonth();
+        renderDateModalContent();
+        return;
+      }
+
+      // Same-month click: only update selected highlight, keep the apply button alive
+      container?.querySelectorAll('.dp-day').forEach(d => d.classList.remove('selected'));
+      el.classList.add('selected');
+    });
   });
 
   // Apply button
   document.getElementById('applyDate')?.addEventListener('click', () => {
     updateContext({
       date: new Date(dateModalState.selectedDate.getTime()),
-      startTime: dateModalState.selectedTime,
     });
     persistContext();
     closeModal('dateModal');
