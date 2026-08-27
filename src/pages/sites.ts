@@ -1,12 +1,13 @@
 // ===== Sites 页面 =====
 // "我在这里，往哪个方向看、每个方向能看到什么"
-import type { CelestialPosition, DirectionSky, CelestialCategory } from '../types';
+import type { CelestialPosition, DirectionSky, CelestialCategory, CelestialObject } from '../types';
 import { ctx, onContextChange, formatDateShort, equipmentSummary } from '../lib/context';
-import { celestialCatalog } from '../lib/catalog';
+import { getCelestialCatalog } from '../lib/catalog';
 import { computePosition, computeMoonPhase, computeSunInfo, groupByDirection } from '../lib/astronomy';
 import { fetchHourlyWeather, computeHourlyScore, findBestWindow } from '../lib/weather';
-import { DARK_SKY_PLACES } from '../lib/dark-sky-places';
-import { t, tCat } from '../lib/i18n';
+import { getAllPlaces, type DarkSkyPlace } from '../lib/dark-sky-places';
+import { t } from '../lib/i18n';
+import { fetchBestObjects } from '../lib/api';
 import { computeTonightSummary, type TonightSummary } from '../lib/recommendation';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -31,7 +32,7 @@ let overallScore = 0;
 let moonPhaseName = '';
 let bestWindow = '';
 let tonightSummary: TonightSummary | null = null;
-let tomorrowSummary: TonightSummary | null = null;
+let upcomingData: Record<string, any[]> = {};
 let mapInstance: L.Map | null = null;
 let mapMarkers: L.Layer[] = [];
 let mapRadiusCircle: L.Circle | null = null;
@@ -204,7 +205,8 @@ async function recalculate() {
     obsDate.setHours(hh || 22, mm || 0, 0, 0);
 
     // Compute positions for all objects at observation time (used by tonight recommendation)
-    const positions = celestialCatalog
+    const catalog = getCelestialCatalog();
+    const positions = catalog
       .filter(obj => filterByTarget(obj.type))
       .map(obj => computePosition(obj, loc, obsDate))
       .filter(p => p.visible && p.altitude > 0);
@@ -265,23 +267,31 @@ async function recalculate() {
     console.error('recalculate error:', err);
   }
 
-  // Compute tonight + tomorrow summaries (async, separate from compass)
+  // Compute tonight summary + fetch upcoming from backend
   try {
     const [hh2, mm2] = ctx.startTime.split(':').map(Number);
     const obsDate2 = new Date(ctx.date);
     obsDate2.setHours(hh2 || 22, mm2 || 0, 0, 0);
-    const obsDate3 = new Date(obsDate2.getTime());
-    obsDate3.setDate(obsDate3.getDate() + 1);
 
-    const catalog = celestialCatalog.filter(obj => filterByTarget(obj.type));
+    const catalog2 = getCelestialCatalog().filter(obj => filterByTarget(obj.type));
     const loc = { lat: ctx.location.lat, lon: ctx.location.lon };
 
-    [tonightSummary, tomorrowSummary] = await Promise.all([
-      computeTonightSummary(catalog, loc, obsDate2, ctx.equipment, ctx.location.bortle, ctx.language || 'zh'),
-      computeTonightSummary(catalog, loc, obsDate3, ctx.equipment, ctx.location.bortle, ctx.language || 'zh'),
-    ]);
+    tonightSummary = await computeTonightSummary(catalog2, loc, obsDate2, ctx.equipment, ctx.location.bortle, ctx.language || 'zh');
     overallScore = tonightSummary.overallScore;
     bestWindow = tonightSummary.bestWindow;
+
+    // Fetch upcoming (next 30 days) from backend — may return empty if API unavailable
+    try {
+      const result = await fetchBestObjects({
+        latitude: loc.lat,
+        longitude: loc.lon,
+        perCategory: 5,
+      });
+      upcomingData = result.upcoming;
+    } catch {
+      upcomingData = {};
+    }
+
     renderTonightRecommendation();
   } catch (err) {
     console.error('tonight summary error:', err);
@@ -316,7 +326,7 @@ function renderNearbySites() {
   if (!container) return;
 
   const loc = ctx.location;
-  const sites = DARK_SKY_PLACES
+  const sites = getAllPlaces()
     .filter(p => placeInRange(p, loc))
     .filter(p => siteMatchesTarget(p))
     .map(p => ({
@@ -336,8 +346,9 @@ function renderNearbySites() {
     const statusLabel = s.yearCert ? t('status.official') : t('status.suggested');
     const scoreVal = Math.max(10, 100 - s.bortle * 10);
     const pinColor = scoreVal >= 70 ? '#7fdda9' : scoreVal >= 40 ? '#8bb5ff' : '#f0c96e';
+    const navId = (s as any)._apiId || s.name;
     return `
-      <div class="card clickable" data-site-name="${s.name}">
+      <div class="card clickable" data-site-name="${navId}">
         <div class="site-card">
           <div class="site-pin-num" style="background:${pinColor}">${i + 1}</div>
           <div class="site-card-body">
@@ -378,8 +389,13 @@ function typeToBadge(type: string): { cls: string; label: string } {
     moon: { cls: '', label: t('type.moon') },
     star: { cls: 'good', label: t('type.star') },
     deepSky: { cls: 'official', label: t('type.deepSky') },
+    galaxy: { cls: 'official', label: t('type.galaxy') },
     milkyway: { cls: 'good', label: t('type.milkyway') },
     meteor: { cls: 'warn', label: t('type.meteor') },
+    comet: { cls: 'warn', label: t('type.comet') },
+    asteroid: { cls: 'warn', label: t('type.asteroid') },
+    doubleStar: { cls: 'good', label: t('type.doubleStar') },
+    multipleStar: { cls: 'good', label: t('type.multipleStar') },
   };
   return map[type] || { cls: '', label: type };
 }
@@ -426,9 +442,10 @@ function renderFavoritesList(tab: 'places' | 'objects' = 'places') {
     let ids: string[] = [];
     try { ids = JSON.parse(localStorage.getItem('ds_favorite_places') || '[]'); } catch { ids = []; }
 
-    const favs = ids.map(id => DARK_SKY_PLACES.find(p => p.name === id)).filter(Boolean) as typeof DARK_SKY_PLACES;
+    const allPlaces = getAllPlaces();
+    const favs = ids.map(id => allPlaces.find(p => p.name === id || (p as any)._apiId === id)).filter(Boolean) as DarkSkyPlace[];
 
-    if (favs.length === 0) {
+  if (favs.length === 0) {
       container.innerHTML = `<div class="card"><div class="meta" style="text-align:center;padding:20px 0">${t('fav.emptyPlaces')}</div></div>`;
       return;
     }
@@ -460,17 +477,17 @@ function renderFavoritesList(tab: 'places' | 'objects' = 'places') {
   }
 
   // === objects tab ===
-  let ids: string[] = [];
-  try { ids = JSON.parse(localStorage.getItem('ds_favorite_objects') || '[]'); } catch { ids = []; }
+  let objIds: string[] = [];
+  try { objIds = JSON.parse(localStorage.getItem('ds_favorite_objects') || '[]'); } catch { objIds = []; }
 
-  const favs = ids.map(id => celestialCatalog.find(o => o.id === id)).filter(Boolean) as typeof celestialCatalog;
+  const favObjs = objIds.map(id => getCelestialCatalog().find(o => o.id === id)).filter(Boolean) as CelestialObject[];
 
-  if (favs.length === 0) {
+  if (favObjs.length === 0) {
     container.innerHTML = `<div class="card"><div class="meta" style="text-align:center;padding:20px 0">${t('fav.empty')}</div></div>`;
     return;
   }
 
-  container.innerHTML = favs.map(obj => {
+  container.innerHTML = favObjs.map(obj => {
     const constLabel = obj.constellation && obj.constellation !== '—'
       ? (ctx.language === 'zh' ? `（${obj.constellation}）` : ` (${obj.constellation})`)
       : '';
@@ -479,7 +496,7 @@ function renderFavoritesList(tab: 'places' | 'objects' = 'places') {
       <div class="card clickable fav-item" data-fav-id="${obj.id}">
         <div class="row">
           <div style="flex:1;min-width:0">
-            <div class="place">${tCat(obj.id, 'name') || obj.name}<span class="const-sub">${constLabel}</span></div>
+            <div class="place">${obj.name}<span class="const-sub">${constLabel}</span></div>
             <div class="meta">${obj.description || ''}</div>
           </div>
           <span class="badge ${typeBadge.cls}">${typeBadge.label}</span>
@@ -501,14 +518,14 @@ function renderTonightRecommendation() {
   const container = document.getElementById('tonightRec');
   if (!container) return;
 
-  if (!tonightSummary && !tomorrowSummary) {
+  if (!tonightSummary && !hasUpcomingData()) {
     container.innerHTML = '';
     return;
   }
 
   container.innerHTML = `
     ${tonightSummary ? renderSummaryBlock(tonightSummary, 'tonight') : ''}
-    ${tomorrowSummary ? renderSummaryBlock(tomorrowSummary, 'tomorrow') : ''}
+    ${renderUpcomingBlock()}
   `;
 
   // Click handlers for recommended objects
@@ -520,13 +537,112 @@ function renderTonightRecommendation() {
   });
 }
 
+function hasUpcomingData(): boolean {
+  return !!upcomingData && Object.keys(upcomingData).length > 0 &&
+    Object.values(upcomingData).some(arr => Array.isArray(arr) && arr.length > 0);
+}
+
+function formatTimeShort(iso: string): string {
+  try {
+    return new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+  } catch {
+    return '—';
+  }
+}
+
+function renderUpcomingBlock(): string {
+  if (!hasUpcomingData()) return '';
+
+  const isZh = (ctx.language || 'zh') === 'zh';
+  const typeMap: Record<string, { cls: string; label: string }> = {
+    meteor_shower: { cls: 'warn', label: t('type.meteor') },
+    comet: { cls: 'warn', label: t('type.comet') },
+    asteroid: { cls: 'warn', label: t('type.asteroid') },
+    planet: { cls: 'warn', label: t('type.planet') },
+    star: { cls: 'good', label: t('type.star') },
+    deep_sky: { cls: 'official', label: t('type.deepSky') },
+    double_star: { cls: 'good', label: t('type.doubleStar') },
+    milky_way: { cls: 'good', label: t('type.milkyway') },
+  };
+
+  const categoryOrder = [
+    'meteor_showers', 'planets', 'comets', 'asteroids',
+    'stars', 'deep_sky', 'double_stars', 'milky_way'
+  ];
+
+  const catLabels: Record<string, { zh: string; en: string }> = {
+    meteor_showers: { zh: '流星雨', en: 'Meteor Showers' },
+    planets: { zh: '行星', en: 'Planets' },
+    comets: { zh: '彗星', en: 'Comets' },
+    asteroids: { zh: '小行星', en: 'Asteroids' },
+    stars: { zh: '恒星', en: 'Stars' },
+    deep_sky: { zh: '深空', en: 'Deep Sky' },
+    double_stars: { zh: '双星', en: 'Double Stars' },
+    milky_way: { zh: '银河', en: 'Milky Way' },
+  };
+
+  const sections = categoryOrder
+    .filter(key => Array.isArray(upcomingData[key]) && upcomingData[key].length > 0)
+    .map(key => {
+      const items = upcomingData[key].slice(0, 5);
+      const catLabel = isZh ? catLabels[key]?.zh : catLabels[key]?.en;
+      const itemsHtml = items.map((item: any) => {
+        const objType = item.object_type || '';
+        const badge = typeMap[objType] || { cls: '', label: objType };
+        const objectId = item.object_id || '';
+        const clickAttr = objectId ? `clickable" data-object="${objectId}` : '';
+
+        let info = '';
+        if (key === 'meteor_showers') {
+          info = `${isZh ? '高峰' : 'Peak'} ${item.peak_month || '?'}/${item.peak_day || '?'} · ZHR ${item.zhr || '—'}`;
+        } else if (key === 'planets') {
+          const start = item.best_observation_start ? formatTimeShort(item.best_observation_start) : '?';
+          const end = item.best_observation_end ? formatTimeShort(item.best_observation_end) : '?';
+          info = `${isZh ? '最佳' : 'Best'} ${start}–${end}`;
+        } else if (key === 'milky_way') {
+          info = `${isZh ? '最佳时间' : 'Best'} ${item.best_time || '—'}${item.visible_band ? ' · ' + item.visible_band : ''}`;
+        } else {
+          const parts: string[] = [];
+          if (item.magnitude != null) parts.push(`Mag ${typeof item.magnitude === 'number' ? item.magnitude.toFixed(1) : item.magnitude}`);
+          if (item.constellation) parts.push(item.constellation);
+          if (item.best_month_name) parts.push(`${isZh ? '最佳' : 'Best'} ${item.best_month_name}`);
+          if (item.designation && item.designation !== item.primary_name) parts.push(item.designation);
+          info = parts.join(' · ') || '—';
+        }
+
+        const name = item.primary_name || item.designation || '—';
+        return `
+          <div class="card ${clickAttr}" style="margin-bottom:8px">
+            <div class="row">
+              <div style="flex:1;min-width:0">
+                <div class="place">${name}</div>
+                <div class="meta">${info}</div>
+              </div>
+              <span class="badge ${badge.cls}" style="flex:0 0 auto">${badge.label}</span>
+            </div>
+          </div>`;
+      }).join('');
+
+      return `<div class="section"><span class="page-sub">${catLabel}</span></div>${itemsHtml}`;
+    }).join('');
+
+  if (!sections) return '';
+
+  return `
+    <div class="section">
+      <h3>${t('tonight.tomorrowPicks')}</h3>
+    </div>
+    ${sections}
+  `;
+}
+
 function renderSummaryBlock(s: TonightSummary, night: 'tonight' | 'tomorrow'): string {
   const isZh = (ctx.language || 'zh') === 'zh';
   const scoreClass = s.overallScore >= 70 ? 'great' : s.overallScore >= 40 ? 'ok' : s.overallScore >= 20 ? 'meh' : 'bad';
 
   const topPicksHtml = s.topPicks.map(pick => {
-    const obj = celestialCatalog.find(o => o.id === pick.objectId);
-    const objName = tCat(pick.objectId, 'name') || obj?.name || pick.objectId;
+    const obj = getCelestialCatalog().find(o => o.id === pick.objectId);
+    const objName = obj?.name || pick.objectId;
     const constLabel = obj && obj.constellation && obj.constellation !== '—'
       ? (ctx.language === 'zh' ? `（${obj.constellation}）` : ` (${obj.constellation})`)
       : '';
@@ -635,7 +751,7 @@ function updateMapPins() {
   mapMarkers = [];
 
   const loc = ctx.location;
-  const sites = DARK_SKY_PLACES
+  const sites = getAllPlaces()
     .filter(p => placeInRange(p, loc))
     .filter(p => siteMatchesTarget(p))
     .map(p => ({
@@ -648,6 +764,7 @@ function updateMapPins() {
   sites.forEach((s, i) => {
     const scoreVal = Math.max(10, 100 - s.bortle * 10);
     const color = scoreVal >= 70 ? '#7fdda9' : scoreVal >= 40 ? '#8bb5ff' : '#f0c96e';
+    const navId = (s as any)._apiId || s.name;
 
     const pinIcon = L.divIcon({
       className: '',
@@ -665,7 +782,7 @@ function updateMapPins() {
     });
 
     marker.on('click', () => {
-      (window as any).navigateTo?.('place-detail', s.name);
+      (window as any).navigateTo?.('place-detail', navId);
     });
 
     mapMarkers.push(marker);

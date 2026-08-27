@@ -6,14 +6,17 @@ import { t } from './lib/i18n';
 import { renderSitesPage, initSitesPage } from './pages/sites';
 import { renderObjectsPage, initObjectsPage } from './pages/objects';
 import { renderObjectDetailPage, initObjectDetailPage } from './pages/object-detail';
+import { renderSiteObjectDetailPage, initSiteObjectDetailPage } from './pages/site-object-detail';
 import { renderPlaceDetailPage, initPlaceDetailPage } from './pages/place-detail';
 import { renderObservePage, initObservePage } from './pages/observe';
 import { renderProfilePage, initProfilePage } from './pages/profile';
 import { CONTRIBUTION_FIELDS, submitContribution, validateContribution, loadContributions } from './lib/contribution';
-import { DARK_SKY_PLACES } from './lib/dark-sky-places';
+import { DARK_SKY_PLACES, getAllPlaces } from './lib/dark-sky-places';
+import { loadCelestialCatalog } from './lib/catalog';
+import { loadApiSites } from './lib/dark-sky-places';
 
 // ===== Navigation Stack =====
-type PageRoute = { type: 'tab'; tab: TabId } | { type: 'object-detail'; id: string } | { type: 'place-detail'; id: string };
+type PageRoute = { type: 'tab'; tab: TabId } | { type: 'object-detail'; id: string } | { type: 'place-detail'; id: string } | { type: 'site-object-detail'; siteId: string; objId: string };
 let navStack: PageRoute[] = [{ type: 'tab', tab: 'sites' }];
 
 function pushRoute(route: PageRoute) {
@@ -30,9 +33,10 @@ function popRoute() {
   updateTabBarVisibility();
 }
 
-function navigateTo(type: string, id: string) {
+function navigateTo(type: string, id: string, id2?: string) {
   if (type === 'object-detail') pushRoute({ type: 'object-detail', id });
   else if (type === 'place-detail') pushRoute({ type: 'place-detail', id });
+  else if (type === 'site-object-detail' && id2) pushRoute({ type: 'site-object-detail', siteId: id, objId: id2 });
 }
 
 function navigateBack() {
@@ -134,6 +138,11 @@ function renderRoute(route: PageRoute) {
     case 'place-detail':
       container.innerHTML = renderPlaceDetailPage(route.id);
       initPlaceDetailPage();
+      break;
+
+    case 'site-object-detail':
+      container.innerHTML = renderSiteObjectDetailPage(route.siteId, route.objId);
+      initSiteObjectDetailPage();
       break;
   }
 }
@@ -491,8 +500,9 @@ function initContributionModal() {
       return;
     }
 
-    // Find site data
-    const site = DARK_SKY_PLACES.find(p => p.name === contributeSiteName);
+    // Find site data (search across hardcoded + API-loaded places)
+    const allPlaces = getAllPlaces();
+    const site = allPlaces.find(p => p.name === contributeSiteName) || DARK_SKY_PLACES.find(p => p.name === contributeSiteName);
     if (!site) {
       toast(isZh ? '地点未找到' : 'Site not found');
       return;
@@ -560,6 +570,15 @@ async function init() {
   }
   initEquipmentModal();
   initContributionModal();
+
+  // 异步加载后端天体目录 + 附近站点（不阻塞首屏渲染）
+  loadCelestialCatalog().then(() => {
+    // catalog 加载完成后刷新当前页面
+    renderCurrentPage();
+  });
+  loadApiSites(ctx.location.lat, ctx.location.lon).then(() => {
+    renderCurrentPage();
+  });
 
   // Tab bar
   document.querySelectorAll('.tab').forEach(t => {

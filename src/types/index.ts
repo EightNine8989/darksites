@@ -45,7 +45,7 @@ export interface DirectionObject {
 }
 
 // ===== Celestial Objects =====
-export type CelestialCategory = 'planet' | 'star' | 'deepSky' | 'moon' | 'meteor' | 'milkyway';
+export type CelestialCategory = 'planet' | 'star' | 'deepSky' | 'galaxy' | 'moon' | 'meteor' | 'milkyway' | 'comet' | 'asteroid' | 'doubleStar' | 'multipleStar';
 
 export interface CelestialObject {
   id: string;

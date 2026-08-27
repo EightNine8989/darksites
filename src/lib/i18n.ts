@@ -42,6 +42,11 @@ const translations: Record<string, Record<Lang, string>> = {
   'filter.planets':    { zh: '行星', en: 'Planets' },
   'filter.stars':      { zh: '恒星', en: 'Stars' },
   'filter.deepSky':    { zh: '深空天体', en: 'Deep Sky' },
+  'filter.galaxy':     { zh: '星系', en: 'Galaxies' },
+  'filter.doubleStar': { zh: '双星', en: 'Double Stars' },
+  'filter.multipleStar': { zh: '聚星', en: 'Multiple Stars' },
+  'filter.comet':    { zh: '彗星', en: 'Comets' },
+  'filter.asteroid': { zh: '小行星', en: 'Asteroids' },
 
   // === Objects Page ===
   'objects.sub':       { zh: '你想看什么', en: 'What do you want to see?' },
@@ -168,9 +173,14 @@ const translations: Record<string, Record<Lang, string>> = {
   'type.planet':   { zh: '行星', en: 'Planet' },
   'type.star':     { zh: '恒星', en: 'Star' },
   'type.deepSky':  { zh: '深空', en: 'Deep Sky' },
+  'type.galaxy':   { zh: '星系', en: 'Galaxy' },
   'type.moon':     { zh: '月亮', en: 'Moon' },
   'type.milkyway': { zh: '银河', en: 'Milky Way' },
   'type.meteor':   { zh: '流星', en: 'Meteor' },
+  'type.comet':    { zh: '彗星', en: 'Comet' },
+  'type.asteroid': { zh: '小行星', en: 'Asteroid' },
+  'type.doubleStar': { zh: '双星', en: 'Double Star' },
+  'type.multipleStar': { zh: '聚星', en: 'Multiple Star' },
 
   // === Difficulty ===
   'diff.easy':        { zh: '简单', en: 'Easy' },
@@ -188,7 +198,7 @@ const translations: Record<string, Record<Lang, string>> = {
   // === Tonight Picks ===
   'tonight.picks':       { zh: '今晚推荐', en: 'Tonight picks' },
   'tonight.score':       { zh: '今晚观测评分', en: 'Tonight score' },
-  'tonight.tomorrowPicks': { zh: '明晚推荐', en: 'Tomorrow picks' },
+  'tonight.tomorrowPicks': { zh: '最近推荐', en: 'Recent picks' },
   'tonight.tomorrowScore': { zh: '明晚观测评分', en: 'Tomorrow score' },
 
   // === Contribution ===

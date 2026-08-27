@@ -1,11 +1,13 @@
 // ===== 地点详情页 =====
 // "这个暗夜地点怎么样、天气条件如何、能看什么"
 import { ctx, onContextChange, formatDateShort } from '../lib/context';
-import { celestialCatalog } from '../lib/catalog';
+import { getCelestialCatalog } from '../lib/catalog';
 import { computePosition, computeMoonPhase, computeSunInfo } from '../lib/astronomy';
 import { fetchHourlyWeather, computeHourlyScore, findBestWindow } from '../lib/weather';
-import { DARK_SKY_PLACES } from '../lib/dark-sky-places';
-import { t, tCat } from '../lib/i18n';
+import { DARK_SKY_PLACES, getAllPlaces, darkSiteToPlace } from '../lib/dark-sky-places';
+import { fetchSiteDetail } from '../lib/api';
+import { t } from '../lib/i18n';
+import type { DarkSite } from '../types';
 
 // ===== Favorites Persistence (dark sites) =====
 const PLACE_FAV_KEY = 'ds_favorite_places';
@@ -25,11 +27,73 @@ let weatherNight: 'tonight' | 'tomorrow' = 'tonight';
 // ===== Context listener (unregistered on re-init to avoid duplicates) =====
 let unsubContext: (() => void) | null = null;
 
+// ===== Cache for API site detail (full DarkSite + flattened facility fields) =====
+let _apiSiteDetailCache: Record<string, { bortle: number; elevation?: number; parking?: string; toilet?: string; nightAccess?: string; localLights?: string; fullSite?: DarkSite }> = {};
+
+/** 判断是否为 UUID 格式 */
+function isUUID(s: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+}
+
+/** 异步加载 API 站点详情并更新页面 */
+async function loadApiSiteDetail(siteId: string) {
+  if (!isUUID(siteId)) return;
+  if (_apiSiteDetailCache[siteId]?.fullSite) return;
+  const detail = await fetchSiteDetail(siteId);
+  if (!detail) return;
+  _apiSiteDetailCache[siteId] = {
+    bortle: detail.bortle,
+    elevation: detail.elevation,
+    parking: detail.parking,
+    toilet: detail.toilet,
+    nightAccess: detail.nightAccess,
+    localLights: detail.localLights,
+    fullSite: detail,
+  };
+  // Re-render the page to show updated data
+  const route = ((window as any).getCurrentRoute?.()) as { type: string; id?: string } | undefined;
+  const currentId = route?.type === 'place-detail' ? route.id : undefined;
+  if (currentId === siteId) {
+    const container = document.getElementById('pageContainer');
+    if (container) {
+      container.innerHTML = renderPlaceDetailPage(siteId);
+      initPlaceDetailPage();
+    }
+  }
+}
+
 // ===== Render =====
 export function renderPlaceDetailPage(siteId: string): string {
-  // Find site by name or coordinates
-  const site = DARK_SKY_PLACES.find(p => p.name === siteId || p.nameEn === siteId);
+  // Find site by name, nameEn, or API id (via getAllPlaces which includes API-loaded sites)
+  const allPlaces = getAllPlaces();
+  let site = allPlaces.find(p => p.name === siteId || p.nameEn === siteId || (p as any)._apiId === siteId);
+  // Fallback to hardcoded list
+  if (!site) site = DARK_SKY_PLACES.find(p => p.name === siteId || p.nameEn === siteId);
+  // If still not found but siteId is a UUID, try cached API detail, or async-load it
+  if (!site && isUUID(siteId)) {
+    const cached = _apiSiteDetailCache[siteId]?.fullSite;
+    if (cached) {
+      site = darkSiteToPlace(cached);
+    } else {
+      loadApiSiteDetail(siteId);
+      return `
+        <div class="page-top">
+          <button class="back-btn" id="placeDetailBack">‹</button>
+          <div class="page-sub">${t('placeDetail.darkSite')}</div>
+        </div>
+        <div class="card"><div class="meta" style="text-align:center;padding:40px 0">${ctx.language === 'zh' ? '加载中...' : 'Loading...'}</div></div>`;
+    }
+  }
   if (!site) return '<div class="card"><div class="meta" style="text-align:center;padding:40px 0">' + (ctx.language === 'zh' ? '地点未找到' : 'Place not found') + '</div></div>';
+
+  // If this is an API site (UUID), trigger async detail fetch
+  const apiId = (site as any)._apiId || (isUUID(siteId) ? siteId : undefined);
+  if (apiId) loadApiSiteDetail(apiId);
+
+  // Use cached API detail if available (better bortle/facilities)
+  const apiDetail = apiId ? _apiSiteDetailCache[apiId] : undefined;
+  const effectiveBortle = apiDetail?.bortle ?? site.bortle;
+  const effectiveElevation = apiDetail?.elevation ?? site.altitudeM;
 
   const loc = { lat: site.lat, lon: site.lon };
   const [hh, mm] = ctx.startTime.split(':').map(Number);
@@ -37,13 +101,13 @@ export function renderPlaceDetailPage(siteId: string): string {
   obsDate.setHours(hh || 22, mm || 0, 0, 0);
 
   // Compute all visible objects at this site
-  const positions = celestialCatalog
+  const positions = getCelestialCatalog()
     .map(obj => ({ obj, pos: computePosition(obj, loc, obsDate) }))
     .filter(({ pos }) => pos.visible && pos.altitude > 0)
     .sort((a, b) => b.pos.altitude - a.pos.altitude);
 
   // Score
-  const score = Math.max(10, 100 - site.bortle * 10);
+  const score = Math.max(10, 100 - effectiveBortle * 10);
   const scoreCls = score >= 70 ? 'great' : score >= 40 ? 'ok' : 'meh';
   const scoreLabel = score >= 70 ? t('vis.excellent') : score >= 40 ? t('vis.good') : score >= 20 ? t('vis.fair') : t('vis.poor');
 
@@ -71,7 +135,7 @@ export function renderPlaceDetailPage(siteId: string): string {
         <strong style="font-size:48px;letter-spacing:-2px;color:var(--${scoreCls === 'great' ? 'good' : scoreCls === 'ok' ? 'blue' : scoreCls === 'meh' ? 'warn' : 'bad'})">${score}</strong>
         <span style="padding-bottom:8px;font-size:13px;color:var(--good)">${scoreLabel}</span>
       </div>
-      <div class="meta">${distKm} km · Bortle ${site.bortle} · ${site.type}${site.yearCert ? ` · ${t('status.official')} ${site.yearCert}` : ''}${site.altitudeM ? ` · ${site.altitudeM}m ${ctx.language === 'zh' ? '海拔' : 'elevation'}` : ''}</div>
+      <div class="meta">${distKm} km · Bortle ${effectiveBortle} · ${site.type}${site.yearCert ? ` · ${t('status.official')} ${site.yearCert}` : ''}${effectiveElevation ? ` · ${effectiveElevation}m ${ctx.language === 'zh' ? '海拔' : 'elevation'}` : ''}</div>
       ${site.description ? `<div class="meta" style="margin-top:4px">${site.description}</div>` : ''}
     </div>
 
@@ -135,7 +199,7 @@ export function renderPlaceDetailPage(siteId: string): string {
         <div class="card clickable" data-object-id="${obj.id}">
           <div class="row">
             <div>
-              <div class="place">${tCat(obj.id, 'name') || obj.name}<span class="const-sub">${constLabel}</span></div>
+              <div class="place">${obj.name}<span class="const-sub">${constLabel}</span></div>
               <div class="meta">${ctx.language === 'zh' ? '最佳' : 'Best'} ${pos.bestTime} · ${pos.directionText} · ${ctx.language === 'zh' ? '高度' : 'Alt'} ${pos.altitude.toFixed(0)}°</div>
             </div>
             <span class="badge ${typeBadge.cls}">${typeBadge.label}</span>
@@ -149,15 +213,15 @@ export function renderPlaceDetailPage(siteId: string): string {
     <div class="grid-2">
       <div class="fact">
         <div class="label">${t('placeDetail.parking')}</div>
-        <div class="value">${site.bortle <= 2 ? (ctx.language === 'zh' ? '有' : 'Available') : (ctx.language === 'zh' ? '需确认' : 'Check locally')}</div>
+        <div class="value">${formatFacility(apiDetail?.parking, site.bortle, 'parking')}</div>
       </div>
       <div class="fact">
         <div class="label">${t('placeDetail.nightAccess')}</div>
-        <div class="value">${site.type === 'Park' || site.type === 'Reserve' ? (ctx.language === 'zh' ? '开放' : 'Open') : (ctx.language === 'zh' ? '确认时间' : 'Verify hours')}</div>
+        <div class="value">${formatFacility(apiDetail?.nightAccess, site.bortle, 'nightAccess')}</div>
       </div>
       <div class="fact">
         <div class="label">${t('placeDetail.localLights')}</div>
-        <div class="value">${site.bortle <= 2 ? (ctx.language === 'zh' ? '极少' : 'Minimal') : site.bortle <= 4 ? (ctx.language === 'zh' ? '轻微' : 'Minor') : (ctx.language === 'zh' ? '中等' : 'Moderate')}</div>
+        <div class="value">${formatFacility(apiDetail?.localLights, site.bortle, 'localLights')}</div>
       </div>
       <div class="fact">
         <div class="label">${t('placeDetail.contribute')}</div>
@@ -246,10 +310,15 @@ export function initPlaceDetailPage(): void {
 function loadWeather() {
   const siteName = document.querySelector('.hero-card h1')?.textContent;
   if (!siteName) return;
-  const site = DARK_SKY_PLACES.find(p => p.name === siteName);
+  // Compute visible objects at this site for weather scoring
+  const allPlaces = getAllPlaces();
+  const site = allPlaces.find(p => p.name === siteName || (p as any)._apiId === siteName) || DARK_SKY_PLACES.find(p => p.name === siteName);
   if (!site) return;
 
   const isZh = (ctx.language || 'zh') === 'zh';
+  const apiId = (site as any)._apiId;
+  const apiDetail = apiId ? _apiSiteDetailCache[apiId] : undefined;
+  const effectiveBortle = apiDetail?.bortle ?? site.bortle;
 
   fetchHourlyWeather({ lat: site.lat, lon: site.lon }).then(weatherData => {
     if (!weatherData) return;
@@ -301,7 +370,7 @@ function loadWeather() {
       const r = computeHourlyScore({
         cloudCover: h.cloudCover, moonAltitude: moonInfo.altitude,
         moonIllumination: moonInfo.illumination, sunAltitude: sunInfo.altitude,
-        windSpeed: h.windSpeed, bortle: site.bortle, visibility: h.visibility
+        windSpeed: h.windSpeed, bortle: effectiveBortle, visibility: h.visibility
       });
       return { time: new Date(h.time), score: r.score };
     });
@@ -312,14 +381,58 @@ function loadWeather() {
 }
 
 // ===== Helpers =====
+function formatFacility(apiValue: string | undefined, bortle: number, facilityType: 'parking' | 'nightAccess' | 'localLights'): string {
+  const isZh = (ctx.language || 'zh') === 'zh';
+  // If we have API data, use it
+  if (apiValue && apiValue !== 'unknown') {
+    const parkingLabels: Record<string, { zh: string; en: string }> = {
+      'easy': { zh: '有', en: 'Available' },
+      'limited': { zh: '有限', en: 'Limited' },
+      'none': { zh: '无', en: 'None' },
+    };
+    const nightAccessLabels: Record<string, { zh: string; en: string }> = {
+      'open': { zh: '开放', en: 'Open' },
+      'restricted': { zh: '受限', en: 'Restricted' },
+      'closed': { zh: '关闭', en: 'Closed' },
+    };
+    const localLightsLabels: Record<string, { zh: string; en: string }> = {
+      'none': { zh: '极少', en: 'Minimal' },
+      'minor': { zh: '轻微', en: 'Minor' },
+      'moderate': { zh: '中等', en: 'Moderate' },
+      'severe': { zh: '严重', en: 'Severe' },
+    };
+    const labelMap = facilityType === 'parking' ? parkingLabels
+      : facilityType === 'nightAccess' ? nightAccessLabels
+      : localLightsLabels;
+    const label = labelMap[apiValue];
+    if (label) return isZh ? label.zh : label.en;
+  }
+  // Fallback to heuristic based on bortle
+  if (facilityType === 'parking') {
+    return bortle <= 2 ? (isZh ? '有' : 'Available') : (isZh ? '需确认' : 'Check locally');
+  }
+  if (facilityType === 'nightAccess') {
+    return (isZh ? '确认时间' : 'Verify hours');
+  }
+  if (facilityType === 'localLights') {
+    return bortle <= 2 ? (isZh ? '极少' : 'Minimal') : bortle <= 4 ? (isZh ? '轻微' : 'Minor') : (isZh ? '中等' : 'Moderate');
+  }
+  return isZh ? '未知' : 'Unknown';
+}
+
 function typeToInfo(type: string): { cls: string; label: string } {
   const map: Record<string, { cls: string; label: string }> = {
-    planet:  { cls: 'warn', label: t('type.planet') },
-    star:    { cls: 'good', label: t('type.star') },
-    deepSky: { cls: 'official', label: t('type.deepSky') },
-    moon:    { cls: '', label: t('type.moon') },
-    milkyway:{ cls: 'good', label: t('type.milkyway') },
-    meteor:  { cls: 'warn', label: t('type.meteor') },
+    planet:      { cls: 'warn', label: t('type.planet') },
+    star:        { cls: 'good', label: t('type.star') },
+    deepSky:     { cls: 'official', label: t('type.deepSky') },
+    galaxy:      { cls: 'official', label: t('type.galaxy') },
+    moon:        { cls: '', label: t('type.moon') },
+    milkyway:    { cls: 'good', label: t('type.milkyway') },
+    meteor:      { cls: 'warn', label: t('type.meteor') },
+    comet:       { cls: 'warn', label: t('type.comet') },
+    asteroid:    { cls: 'warn', label: t('type.asteroid') },
+    doubleStar:  { cls: 'good', label: t('type.doubleStar') },
+    multipleStar:{ cls: 'good', label: t('type.multipleStar') },
   };
   return map[type] || { cls: '', label: type };
 }
